@@ -16,6 +16,8 @@ public class LoadMap : MonoBehaviour {
 	float width, height;
 
 	Area[,] areas;
+	int areasperstat = 5;
+	int totallandcount;
 
 	void Start () {
 
@@ -46,10 +48,13 @@ public class LoadMap : MonoBehaviour {
 
 		changeLand ();
 		setCoasts ();
+		setStatistics ();
 
-		renderAreas ();
+		//renderAreas ();
 		setTerrain ();
+
 		subdivideAreas ();
+		renderSubdivisions ();
 
 	}
 
@@ -59,19 +64,85 @@ public class LoadMap : MonoBehaviour {
 
 	}
 
+	public void setStatistics() {
+
+		int totallcount = 0;
+		for (int j = 0; j < subdivisionsy; j += areasperstat) {
+			for (int i = 0; i < subdivisionsx; i += areasperstat) {
+
+				Statistics stat = new Statistics ();
+				int lcount = 0;
+
+				for (int k = 0; k < areasperstat; k++) {
+					for (int p = 0; p < areasperstat; p++) {
+						if (i + k >= subdivisionsx || j + p >= subdivisionsy) {
+							continue;
+						}
+						Area a = areas [i + k, j + p];
+						if (a.type == Area.Type.LAND) {
+							stat.addArea (a);
+							lcount++;
+							totallcount++;
+						}
+					}
+				}
+
+				stat.compileData ();
+				stat.landcount = lcount;
+
+				/**
+				System.Console.WriteLine ("------------------------");
+				System.Console.WriteLine (i + " " + j);
+				stat.printStats ();
+				System.Console.WriteLine ("------------------------");
+				**/
+
+				for (int k = 0; k < areasperstat; k++) {
+					for (int p = 0; p < areasperstat; p++) {
+						if (i + k >= subdivisionsx || j + p >= subdivisionsy) {
+							continue;
+						}
+						Area a = areas [i + k, j + p];
+						a.statistics = stat;
+					}
+				}
+
+			}
+		}
+		totallandcount = totallcount;
+
+	}
+
 	public void subdivideAreas() {
 		for (int i = 0; i < subdivisionsx; i++) {
 			for (int j = 0; j < subdivisionsy; j++) {
 				Area a = areas [i, j];
+				if (a.type != Area.Type.LAND) {
+					continue;
+				}
 				a.setRandomSubdivisions();
+			}
+		}
+	}
+
+	public void renderSubdivisions() {
+		for (int i = 0; i < subdivisionsx; i++) {
+			for (int j = 0; j < subdivisionsy; j++) {
+				Area a = areas [i, j];
+				if (a.type != Area.Type.LAND) {
+					continue;
+				}
 				List<Subdivision> subs = a.subdivisions;
 				foreach (Subdivision s in subs) {
 
 					Mesh m = s.mesh;
-					Material mat = Resources.Load ("Materials/Grey") as Material;
+					if (m == null) {
+						continue;
+					}
+					Material mat = Resources.Load ("Materials/Green") as Material;
 
 					GameObject cube = Instantiate(Resources.Load ("Prefabs/Cube", typeof(GameObject)) as GameObject);
-					cube.transform.position = new Vector3 (0, 2.04f, 0);
+					cube.transform.position = new Vector3 (0, 1f, 0);
 					cube.name = "Subdivision";
 
 					MeshFilter mf = cube.GetComponent<MeshFilter>();
@@ -102,16 +173,16 @@ public class LoadMap : MonoBehaviour {
 				int areay = (int)Mathf.Floor (((float)x / (float)height)*(float)subdivisionsy);
 
 				if (areas [areax, areay].type == Area.Type.LAND) {
-					float h = Mathf.PerlinNoise (x, y);
+					float h = Mathf.PerlinNoise (x, y)/1.2f;
 					heights [i, j] = 0.5f + h;
 				} else if (areas [areax, areay].type == Area.Type.COAST) {
 					if (areas [areax, areay].containsPointInMesh (new Vector2 (y, x))) {
-						float h = Mathf.PerlinNoise (x, y);
+						float h = Mathf.PerlinNoise (x, y)/1.2f;
 						Vector2 offset = new Vector2 (areas [areax, areay].getHalfX (), areas [areax, areay].getHalfY ()) - new Vector2 (y, x);
 						float dist = offset.magnitude;
 						heights [i, j] = 0.5f + h - 1f/dist;
 					} else {
-						float h = Mathf.PerlinNoise (x, y)/1.05f;
+						float h = Mathf.PerlinNoise (x, y)/1.2f;
 						heights [i, j] = h - 0.45f;
 					}
 				}
@@ -521,8 +592,8 @@ public class LoadMap : MonoBehaviour {
 					Material m = Resources.Load ("Materials/Green") as Material;
 
 					GameObject cube = Instantiate(Resources.Load ("Prefabs/Cube", typeof(GameObject)) as GameObject);
-					cube.transform.position = new Vector3 (a.getHalfX (), 1.5f, a.getHalfY ());
-					cube.transform.localScale = new Vector3 (a.getWidth (), 1.06f, a.getHeight ());
+					cube.transform.position = new Vector3 (a.getHalfX (), 0f, a.getHalfY ());
+					cube.transform.localScale = new Vector3 (a.getWidth (), 0.01f, a.getHeight ());
 					cube.name = "Land";
 
 					MeshRenderer mr = cube.GetComponent<MeshRenderer> ();
@@ -533,7 +604,7 @@ public class LoadMap : MonoBehaviour {
 					Material m = Resources.Load ("Materials/Blue") as Material;
 
 					GameObject cube = Instantiate(Resources.Load ("Prefabs/Cube", typeof(GameObject)) as GameObject);
-					cube.transform.position = new Vector3 (a.getHalfX (), 1.5f, a.getHalfY ());
+					cube.transform.position = new Vector3 (a.getHalfX (), 0f, a.getHalfY ());
 					cube.transform.localScale = new Vector3 (a.getWidth (), 0.01f, a.getHeight ());
 					cube.name = "Water";
 
@@ -545,7 +616,7 @@ public class LoadMap : MonoBehaviour {
 					Material blue = Resources.Load ("Materials/Blue") as Material;
 
 					GameObject waterbase = Instantiate(Resources.Load ("Prefabs/Cube", typeof(GameObject)) as GameObject);
-					waterbase.transform.position = new Vector3 (a.getHalfX (), 1.5f, a.getHalfY ());
+					waterbase.transform.position = new Vector3 (a.getHalfX (), 0f, a.getHalfY ());
 					waterbase.transform.localScale = new Vector3 (a.getWidth (), 0.01f, a.getHeight ());
 					waterbase.name = "Water";
 
@@ -560,7 +631,7 @@ public class LoadMap : MonoBehaviour {
 					foreach (Mesh msh in meshes) {
 
 						GameObject cube = Instantiate(Resources.Load ("Prefabs/Cube", typeof(GameObject)) as GameObject);
-						cube.transform.position = new Vector3 (0, 2.03f, 0);
+						cube.transform.position = new Vector3 (0, 0.01f, 0);
 						cube.name = "Coast";
 
 						MeshFilter mf = cube.GetComponent<MeshFilter>();

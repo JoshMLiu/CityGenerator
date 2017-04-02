@@ -13,6 +13,7 @@ public class Area {
 	public List<Mesh> meshes;
 	public List<Subdivision> subdivisions;
 	float streetwidth;
+	public Statistics statistics; 
 
 	public enum Type {
 		LAND,
@@ -429,8 +430,8 @@ public class Area {
 			float maxxpointtop = minx + ((float)i / xdivisions) * width;
 
 
-			float randxtop = Random.Range (minxpointtop, maxxpointtop);
-			float randxbot = Random.Range (minxpointtop, maxxpointtop);
+			float randxtop = Random.Range (minxpointtop + streetwidth, maxxpointtop - streetwidth);
+			float randxbot = Random.Range (minxpointtop + streetwidth, maxxpointtop - streetwidth);
 
 			intersections [i, 0] = new Vector2 (randxtop, maxy);
 			intersections [i, ydivisions + 1] = new Vector2 (randxbot, miny);
@@ -444,8 +445,8 @@ public class Area {
 			float maxypointleft = maxy - ((float)i / ydivisions) * height;
 
 
-			float randxleft = Random.Range (minypointleft, maxypointleft);
-			float randxright = Random.Range (minypointleft, maxypointleft);
+			float randxleft = Random.Range (minypointleft + streetwidth, maxypointleft - streetwidth);
+			float randxright = Random.Range (minypointleft + streetwidth, maxypointleft - streetwidth);
 
 			intersections [0, i] = new Vector2 (minx, randxleft);
 			intersections [xdivisions + 1, i] = new Vector2 (maxx, randxright);
@@ -481,15 +482,6 @@ public class Area {
 			}
 		}
 
-		// print 
-		System.Console.WriteLine(minx + " " + maxx+ " " + miny + " " + maxy + " " + width + " " + height);
-		for (int j = 0; j <= ydivisions + 1; j++) {
-			string s = "";
-			for (int i = 0; i <= xdivisions + 1; i++) {
-				s += intersections [i, j] + " ";
-			}
-			System.Console.WriteLine(s);
-		}
 
 		for (int j = 0; j <= ydivisions; j++) {
 			for (int i = 0; i <= xdivisions; i++) {
@@ -505,4 +497,5 @@ public class Area {
 		}
 
 	}
+
 }
