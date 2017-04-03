@@ -8,7 +8,7 @@ public class Statistics {
 	public int totalnodes;
 	public int landcount;
 
-	public enum AreaTypes {
+	public enum AreaType {
 		BUILDINGS,
 		NATURAL,
 		OTHER
@@ -18,7 +18,7 @@ public class Statistics {
 	public float naturalratio;
 	public float otherratio;
 
-	public enum BuildingTypes {
+	public enum BuildingType {
 		TOWER,
 		HOUSE,
 		FOOD,
@@ -41,7 +41,7 @@ public class Statistics {
 
 	Dictionary<int, int> towerheights = new Dictionary<int, int>();
 
-	public enum NaturalTypes {
+	public enum NaturalType {
 		PARK,
 		WOOD,
 		WATER
@@ -53,7 +53,7 @@ public class Statistics {
 
 	Dictionary<string, int> naturals = new Dictionary<string, int>();
 
-	public enum OtherTypes {
+	public enum OtherType {
 		PARKING,
 		ATTRACTION,
 		LEISURE,
@@ -76,6 +76,41 @@ public class Statistics {
 		int naturalcount = 0;
 		int othercount = 0;
 
+		int housecount = 0;
+		buildings.TryGetValue ("house", out housecount);
+		if (housecount > 0) {
+			int newhousecount = (int) Mathf.Ceil ((float)housecount / 10);
+			buildings ["house"] = newhousecount;
+		}
+
+		int parkcount = 0;
+		naturals.TryGetValue ("park", out parkcount);
+		if (parkcount > 0) {
+			int newparkcount = (int) Mathf.Ceil ((float)parkcount*3);
+			naturals ["park"] = newparkcount;
+		}
+
+		int woodcount = 0;
+		naturals.TryGetValue ("wood", out woodcount);
+		if (woodcount > 0) {
+			int newwoodcount = (int) Mathf.Ceil ((float)woodcount*3);
+			naturals ["wood"] = newwoodcount;
+		}
+
+		int foodcount = 0;
+		buildings.TryGetValue ("food", out foodcount);
+		if (foodcount > 0) {
+			int newfoodcount = (int) Mathf.Ceil ((float)foodcount/2);
+			buildings ["food"] = newfoodcount;
+		}
+
+		int shopcount = 0;
+		buildings.TryGetValue ("shop", out shopcount);
+		if (shopcount > 0) {
+			int newshopcount = (int) Mathf.Ceil ((float)shopcount/2);
+			buildings ["shop"] = newshopcount;
+		}
+
 		foreach (KeyValuePair<string, int> entry in buildings) {
 			buildingcount += entry.Value;
 		}
@@ -90,9 +125,11 @@ public class Statistics {
 
 		totalnodes = buildingcount + naturalcount + othercount;
 
-		buildingratio = (float)buildingcount / (float)totalnodes;
-		naturalratio = (float)naturalcount / (float)totalnodes;
-		otherratio = (float)othercount / (float)totalnodes; 
+		if (totalnodes > 0) {
+			buildingratio = (float)buildingcount / (float)totalnodes;
+			naturalratio = (float)naturalcount / (float)totalnodes;
+			otherratio = (float)othercount / (float)totalnodes; 
+		}
 
 		towerratio = 0;
 		houseratio = 0;
@@ -126,14 +163,24 @@ public class Statistics {
 			numtowers += entry.Value;
 			towersum += (float)entry.Key * (float)entry.Value;
 		}
-		meantowerheight = towersum / numtowers;
 
-		float squaresums = 0;
-		foreach (KeyValuePair<int, int> entry in towerheights) {
-			squaresums += Mathf.Pow((float)entry.Key - meantowerheight, 2) * (float)entry.Value;
+		if (numtowers > 0) {
+			meantowerheight = towersum / numtowers;
+			float squaresums = 0;
+			foreach (KeyValuePair<int, int> entry in towerheights) {
+				squaresums += Mathf.Pow((float)entry.Key - meantowerheight, 2) * (float)entry.Value;
+			}
+			if (numtowers == 1) {
+				towervariance = meantowerheight;
+			} else {
+				towervariance = Mathf.Sqrt (squaresums / (float)(numtowers - 1));
+			}
+		} 
+
+		if (towervariance == 0) {
+			towervariance = meantowerheight;
 		}
-		towervariance = Mathf.Sqrt (squaresums / (float)(numtowers - 1));
-
+			
 		parkratio = 0;
 		woodratio = 0;
 		waterratio = 0;
@@ -170,23 +217,21 @@ public class Statistics {
 
 	public void addArea(Area a) {
 
+		List<XmlNode> ways = a.regionwaynodes;
 		List<XmlNode> nodes = a.regionnodes;
 
-		foreach (XmlNode x in nodes) {
+		foreach (XmlNode w in ways) {
 
-			if (x.InnerText.Equals ("")) {
+			if (w.InnerXml.Equals ("")) {
 				continue;
 			}
+				
+			foreach (XmlNode waychild in w.ChildNodes) {
 
-			XmlNodeList children = x.ChildNodes;
-			foreach (XmlNode child in children) {
+				if (waychild.Name.Equals ("tag")) {
 
-				System.Console.WriteLine ("k=" + k + " v=" + v);
-
-				if (child.Name.Equals ("tag")) {
-
-					string k = child.Attributes [0].Value;
-					string v = child.Attributes [1].Value;
+					string k = waychild.Attributes [0].Value;
+					string v = waychild.Attributes [1].Value;
 
 					if (k.Equals ("building:levels") && !v.Equals ("1")) {
 
@@ -195,16 +240,58 @@ public class Statistics {
 						}
 						int tval;
 						buildings.TryGetValue ("tower", out tval);
-						buildings.Add ("tower", tval + 1);
-						int levels = int.Parse (v);
+						buildings["tower"] = tval + 1;
+						int levels = 0;
+						if (!int.TryParse (v, out levels)) {
+							continue;
+						}
 						if (!towerheights.ContainsKey (levels)) {
 							towerheights.Add (levels, 0);
 						}
 						int thval;
 						towerheights.TryGetValue (levels, out thval);
-						towerheights.Add (levels, thval + 1);
+						towerheights[levels] = thval + 1;
+
+					} else if (k.Equals ("addr:housenumber")) {
+
+						if (!buildings.ContainsKey ("house")) {
+							buildings.Add ("house", 0);
+						}
+						int hval;
+						buildings.TryGetValue ("house", out hval);
+						buildings["house"] = hval + 1;
 
 					} else if (k.Equals ("amenity")) {
+						if (v.Equals("place_of_worship")) {
+							if (!buildings.ContainsKey ("place_of_worship")) {
+								buildings.Add ("place_of_worship", 0);
+							}
+							int pwval;
+							buildings.TryGetValue ("place_of_worship", out pwval);
+							buildings["place_of_worship"] = pwval + 1;
+						}
+
+					}
+
+				}
+
+			}
+		}
+
+		foreach (XmlNode x in nodes) {
+
+			if (x.InnerXml.Equals ("")) {
+				continue;
+			}
+				
+			foreach (XmlNode child in x.ChildNodes) {
+
+				if (child.Name.Equals ("tag")) {
+
+					string k = child.Attributes [0].Value;
+					string v = child.Attributes [1].Value;
+
+					if (k.Equals ("amenity")) {
 
 						if (v.Equals ("restaurant") || v.Equals ("fast_food")) {
 							if (!buildings.ContainsKey ("food")) {
@@ -212,35 +299,28 @@ public class Statistics {
 							}
 							int fval;
 							buildings.TryGetValue ("food", out fval);
-							buildings.Add ("food", fval + 1);
+							buildings["food"] = fval + 1;
 						} else if (v.Equals ("school")) {
 							if (!buildings.ContainsKey ("school")) {
 								buildings.Add ("school", 0);
 							}
 							int schval;
 							buildings.TryGetValue ("school", out schval);
-							buildings.Add ("school", schval + 1);
-						} else if (v.Equals ("place_of_worship")) {
-							if (!buildings.ContainsKey ("place_of_worship")) {
-								buildings.Add ("place_of_worship", 0);
-							}
-							int pwval;
-							buildings.TryGetValue ("place_of_worship", out pwval);
-							buildings.Add ("place_of_worship", pwval + 1);
+							buildings["school"] = schval + 1;
 						} else if (v.Equals ("parking")) {
 							if (!others.ContainsKey ("parking")) {
 								others.Add ("parking", 0);
 							}
 							int pval;
 							others.TryGetValue ("parking", out pval);
-							others.Add ("parking", pval + 1);
+							others["parking"] = pval + 1;
 						} else if (v.Equals ("fuel")) {
 							if (!others.ContainsKey ("fuel")) {
 								others.Add ("fuel", 0);
 							}
 							int fuelval;
 							others.TryGetValue ("fuel", out fuelval);
-							others.Add ("fuel", fuelval + 1);
+							others["fuel"] = fuelval + 1;
 						} 
 							
 					} else if (k.Equals ("shop")) {
@@ -250,18 +330,7 @@ public class Statistics {
 						}
 						int shpval;
 						buildings.TryGetValue ("shop", out shpval);
-						buildings.Add ("shop", shpval + 1);
-
-					} else if (k.Equals ("building")) {
-
-						if (v.Equals ("house") || v.Equals ("residential")) {
-							if (!buildings.ContainsKey ("house")) {
-								buildings.Add ("house", 0);
-							}
-							int hval;
-							buildings.TryGetValue ("house", out hval);
-							buildings.Add ("house", hval + 1);
-						}
+						buildings["shop"] = shpval + 1;
 
 					} else if (k.Equals ("natural")) {
 
@@ -271,14 +340,14 @@ public class Statistics {
 							}
 							int wval;
 							naturals.TryGetValue ("wood", out wval);
-							naturals.Add ("wood", wval + 1);
+							naturals["wood"] = wval + 1;
 						} else if (v.Equals ("water")) {
 							if (!naturals.ContainsKey ("water")) {
 								naturals.Add ("water", 0);
 							}
 							int watval;
 							naturals.TryGetValue ("water", out watval);
-							naturals.Add ("water", watval + 1);
+							naturals["water"] = watval + 1;
 						}
 
 					} else if (k.Equals ("landuse")) {
@@ -289,7 +358,7 @@ public class Statistics {
 							}
 							int forval;
 							naturals.TryGetValue ("wood", out forval);
-							naturals.Add ("wood", forval + 1);
+							naturals["wood"] = forval + 1;
 						}
 
 					} else if (k.Equals ("leisure")) {
@@ -300,25 +369,25 @@ public class Statistics {
 							}
 							int pkval;
 							naturals.TryGetValue ("park", out pkval);
-							naturals.Add ("park", pkval + 1);
+							naturals["park"] = pkval + 1;
 						} else {
 							if (!others.ContainsKey ("leisure")) {
 								others.Add ("leisure", 0);
 							}
 							int lval;
 							others.TryGetValue ("leisure", out lval);
-							others.Add ("leisure", lval + 1);
+							others["leisure"] = lval + 1;
 						}
 
 					} else if (k.Equals ("tourism")) {
 
-						if (v.Equals ("attraction") || v.Equals ("museum")) {
+						if (v.Equals ("attraction")) {
 							if (!others.ContainsKey ("attraction")) {
 								others.Add ("attraction", 0);
 							}
 							int aval;
 							others.TryGetValue ("attraction", out aval);
-							others.Add ("attraction", aval + 1);
+							others["attraction"] = aval + 1;
 						}
 
 					}
@@ -357,6 +426,78 @@ public class Statistics {
 		System.Console.WriteLine ("    -> Leisure ratio = " + leisureratio);
 		System.Console.WriteLine ("    -> Fuel ratio = " + fuelratio);
 
+	}
+
+	public AreaType getRandomAreaType() {
+
+		float rand = Random.Range (0f, 1f);
+
+		if (rand <= buildingratio) {
+			return AreaType.BUILDINGS;
+		} else if (rand <= buildingratio + naturalratio) {
+			return AreaType.NATURAL;
+		} else {
+			return AreaType.OTHER;
+		}
+
+	}
+
+	public BuildingType getRandomBuilding() {
+
+		float rand = Random.Range (0f, 1f);
+
+		if (rand <= towerratio) {
+			return BuildingType.TOWER;
+		} else if (rand <= towerratio + houseratio) {
+			return BuildingType.HOUSE;
+		} else if (rand <= towerratio + houseratio + foodratio) {
+			return BuildingType.FOOD;
+		} else if (rand <= towerratio + houseratio + foodratio + shopratio) {
+			return BuildingType.SHOP;
+		} else if (rand <= towerratio + houseratio + foodratio + shopratio + worshipratio) {
+			return BuildingType.PLACEOFWORSHIP;
+		} else {
+			return BuildingType.SCHOOL;
+		}
+
+	}
+
+	public float getRandomTowerHeight() {
+
+		float halfheight = towervariance / 2;
+		float rand = Random.Range (-halfheight, halfheight);
+		return meantowerheight + rand;
+
+	}
+
+	public NaturalType getRandomNatural() {
+
+		float rand = Random.Range (0f, 1f);
+
+		if (rand <= parkratio) {
+			return NaturalType.PARK;
+		} else if (rand <= parkratio + woodratio) {
+			return NaturalType.WOOD;
+		} else {
+			return NaturalType.WATER;
+		}
+			
+	}
+
+	public OtherType getRandomOther() {
+
+		float rand = Random.Range (0f, 1f);
+
+		if (rand <= parkingratio) {
+			return OtherType.PARKING;
+		} else if (rand <= parkingratio + attractionratio) {
+			return OtherType.ATTRACTION;
+		} else if (rand <= parkingratio + attractionratio + leisureratio) {
+			return OtherType.LEISURE;
+		} else {
+			return OtherType.FUEL;
+		}
+	
 	}
 		
 }

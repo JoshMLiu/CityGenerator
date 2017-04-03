@@ -9,6 +9,7 @@ public class Area {
 	int level;
 	public Type type;
 	public List<XmlNode> regionnodes;
+	public List<XmlNode> regionwaynodes;
 	public CoastMap coastmap;
 	public List<Mesh> meshes;
 	public List<Subdivision> subdivisions;
@@ -49,12 +50,13 @@ public class Area {
 
 		type = Type.WATER;
 		regionnodes = new List<XmlNode> ();
+		regionwaynodes = new List<XmlNode> ();
 
 		coastmap = new CoastMap ();
 		meshes = new List<Mesh> ();
 
 		subdivisions = new List<Subdivision> ();
-		streetwidth = width / 60;
+		streetwidth = width / 50;
 	}
 
 	public float getWidth() {
@@ -492,6 +494,8 @@ public class Area {
 				Vector2 br = intersections [i + 1, j + 1];
 
 				Subdivision sub = new Subdivision (tl, tr, bl, br, streetwidth);
+				sub.stats = statistics;
+
 				subdivisions.Add (sub);
 			}
 		}

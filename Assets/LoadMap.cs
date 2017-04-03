@@ -6,7 +6,7 @@ using System.Xml;
 public class LoadMap : MonoBehaviour {
 
 	public static float scale = 10000f;
-	public static int subdivisionsx = 70;
+	public static int subdivisionsx = 50;
 	public static int landiterations = 0;
 	public int subdivisionsy;
 	public float landpercentage = 0.5f;
@@ -16,7 +16,7 @@ public class LoadMap : MonoBehaviour {
 	float width, height;
 
 	Area[,] areas;
-	int areasperstat = 5;
+	int areasperstat = 10;
 	int totallandcount;
 
 	void Start () {
@@ -39,7 +39,7 @@ public class LoadMap : MonoBehaviour {
 		initializeTerrain ();
 		initializeWater ();
 
-		divideNodes (doc, ways);
+		divideNodes (nodelist, doc, ways);
 		setAreas (nodelist, ways);
 
 		// Debug
@@ -57,6 +57,24 @@ public class LoadMap : MonoBehaviour {
 		renderSubdivisions ();
 
 	}
+		
+	void OnApplicationQuit() {
+
+		deleteAll ();
+
+	}
+
+	void deleteAll() {
+
+		GameObject[] objs = GameObject.FindGameObjectsWithTag ("Prefab");
+		print (objs.Length);
+		foreach (GameObject o in objs) {
+			Destroy (o.gameObject);
+		}
+		Resources.UnloadUnusedAssets ();
+
+	}
+
 
 	public void generateRoads() {
 
@@ -65,6 +83,9 @@ public class LoadMap : MonoBehaviour {
 	}
 
 	public void setStatistics() {
+
+		List<XmlNode> randomnodes = new List<XmlNode>();
+		List<XmlNode> randomways = new List<XmlNode>();
 
 		int totallcount = 0;
 		for (int j = 0; j < subdivisionsy; j += areasperstat) {
@@ -80,9 +101,50 @@ public class LoadMap : MonoBehaviour {
 						}
 						Area a = areas [i + k, j + p];
 						if (a.type == Area.Type.LAND) {
-							stat.addArea (a);
 							lcount++;
 							totallcount++;
+						}
+					}
+				}
+
+				if (lcount > (areasperstat * areasperstat) / 3) {
+					randomnodes = new List<XmlNode>();
+					randomways = new List<XmlNode>();
+				}
+					
+				for (int k = 0; k < areasperstat; k++) {
+					for (int p = 0; p < areasperstat; p++) {
+						if (i + k >= subdivisionsx || j + p >= subdivisionsy) {
+							continue;
+						}
+						Area a = areas [i + k, j + p];
+						if (a.type == Area.Type.LAND) {
+							
+							if (lcount <= (areasperstat * areasperstat) / 3) {
+								if (randomnodes.Count != 0 && randomways.Count != 0) {
+									a.regionnodes = randomnodes;
+									a.regionwaynodes = randomways;
+								}
+							} else {
+
+								float ratio = 1/ (float)lcount;
+								foreach (XmlNode x in a.regionnodes) {
+									float rand = Random.Range (0f, 1f);
+									if (rand <= ratio) {
+										randomnodes.Add (x);
+									}
+								}
+								foreach (XmlNode w in a.regionwaynodes) {
+									float rand = Random.Range (0f, 1f);
+									if (rand <= ratio) {
+										randomways.Add (w);
+									}
+								}
+
+							}
+
+							stat.addArea (a);
+
 						}
 					}
 				}
@@ -90,12 +152,10 @@ public class LoadMap : MonoBehaviour {
 				stat.compileData ();
 				stat.landcount = lcount;
 
-				/**
 				System.Console.WriteLine ("------------------------");
 				System.Console.WriteLine (i + " " + j);
 				stat.printStats ();
 				System.Console.WriteLine ("------------------------");
-				**/
 
 				for (int k = 0; k < areasperstat; k++) {
 					for (int p = 0; p < areasperstat; p++) {
@@ -126,12 +186,28 @@ public class LoadMap : MonoBehaviour {
 	}
 
 	public void renderSubdivisions() {
+
+		int totalnodecount = 0;
+		for (int i = 0; i < subdivisionsx; i++) {
+			for (int j = 0; j < subdivisionsy; j++) {
+				totalnodecount += areas [i, j].regionnodes.Count;
+				totalnodecount += areas [i, j].regionwaynodes.Count;
+			}
+		}
+
 		for (int i = 0; i < subdivisionsx; i++) {
 			for (int j = 0; j < subdivisionsy; j++) {
 				Area a = areas [i, j];
 				if (a.type != Area.Type.LAND) {
 					continue;
 				}
+
+
+				float avgnodesperarea = (((float) a.statistics.landcount / (float) totallandcount) * (float) totalnodecount)/(float) (areasperstat*areasperstat);
+				float nodecount = (float) areas [i, j].regionnodes.Count;
+				nodecount += (float)areas [i, j].regionwaynodes.Count;
+				float outputchance = nodecount / avgnodesperarea;
+
 				List<Subdivision> subs = a.subdivisions;
 				foreach (Subdivision s in subs) {
 
@@ -139,20 +215,68 @@ public class LoadMap : MonoBehaviour {
 					if (m == null) {
 						continue;
 					}
-					Material mat = Resources.Load ("Materials/Green") as Material;
+
+					Statistics.AreaType atype = s.stats.getRandomAreaType ();
+						
+					Material mat = Resources.Load ("Materials/Black") as Material;
+					string name = "";
+
+					if (atype == Statistics.AreaType.BUILDINGS) {
+
+						mat = Resources.Load ("Materials/Black") as Material;
+						name = "Buildings";
+
+						List<Mesh> buildingmeshes = s.getBuildingMeshes (outputchance);
+
+						foreach (Mesh bmesh in buildingmeshes) {
+
+							GameObject b = Instantiate(Resources.Load ("Prefabs/Cube", typeof(GameObject)) as GameObject);
+							b.transform.position = new Vector3 (0, 1.01f, 0);
+							b.name = "inst";
+							b.tag = "Prefab";
+
+							MeshFilter bmf = b.GetComponent<MeshFilter>();
+							bmf.mesh = bmesh;
+							MeshRenderer bmr = b.GetComponent<MeshRenderer> ();
+							bmr.sharedMaterial = mat;
+
+						}
+
+					}
+					else if (atype == Statistics.AreaType.NATURAL) {
+
+						mat = Resources.Load ("Materials/Green") as Material;
+						name = "Natural";
+					}
+					else if (atype == Statistics.AreaType.OTHER) {
+
+						Statistics.OtherType othertype = s.stats.getRandomOther ();
+
+						if (othertype == Statistics.OtherType.PARKING) {
+							mat = Resources.Load ("Materials/Grey") as Material;
+							name = "Parking Lot";
+						} else {
+							mat = Resources.Load ("Materials/Blue") as Material;
+							name = "Other";
+						}
+							
+					}
 
 					GameObject cube = Instantiate(Resources.Load ("Prefabs/Cube", typeof(GameObject)) as GameObject);
 					cube.transform.position = new Vector3 (0, 1f, 0);
-					cube.name = "Subdivision";
+					cube.name = name;
+					cube.tag = "Prefab";
 
 					MeshFilter mf = cube.GetComponent<MeshFilter>();
 					mf.mesh = m;
 					MeshRenderer mr = cube.GetComponent<MeshRenderer> ();
-					mr.material = mat;
+					mr.sharedMaterial = mat;
 
 				}
 			}
 		}
+		Resources.UnloadUnusedAssets ();
+
 	}
 
 	public void setTerrain() {
@@ -273,7 +397,7 @@ public class LoadMap : MonoBehaviour {
 						float rand = Random.Range (0f, 1f);
 						if (!(rand > landpercentage + waterpercentage)) {
 							float innerrand = Random.Range (0f, 1f);
-							float totalratio = landpercentage + 2.5f * (waterpercentage);
+							float totalratio = landpercentage + waterpercentage;
 							float landratio = landpercentage / totalratio;
 
 							if (innerrand <= landratio) {
@@ -287,6 +411,10 @@ public class LoadMap : MonoBehaviour {
 												foreach (XmlNode x in areas[i + h, j + k].regionnodes) {
 													areas [i, j].regionnodes.Add (x);
 												}
+												areas [i, j].regionwaynodes = new List<XmlNode> ();
+												foreach (XmlNode w in areas[i + h, j + k].regionwaynodes) {
+													areas [i, j].regionwaynodes.Add (w);
+												}
 											}
 										}
 									}
@@ -294,6 +422,8 @@ public class LoadMap : MonoBehaviour {
 							}
 							else {
 								areas [i, j].type = Area.Type.WATER;
+								areas [i, j].regionnodes = new List<XmlNode> ();
+								areas [i, j].regionwaynodes = new List<XmlNode> ();
 								typeflag = 'W';
 							}
 						} 
@@ -349,7 +479,7 @@ public class LoadMap : MonoBehaviour {
 
 	}
 		
-	public void divideNodes(XmlDocument doc, XmlNodeList ways) {
+	public void divideNodes(Dictionary<string, Node> nodelist, XmlDocument doc, XmlNodeList ways) {
 
 		for (int i = 0; i < subdivisionsx; i++) {
 			for (int j = 0; j < subdivisionsy; j++) {
@@ -369,6 +499,38 @@ public class LoadMap : MonoBehaviour {
 				for (int j = 0; j < subdivisionsy; j++) {
 					if (areas [i, j].containsPoint (p)) {
 						areas [i, j].regionnodes.Add (n);
+						done = true;
+						break;
+					}
+				}
+				if (done)
+					break;
+			}
+		}
+
+		foreach (XmlNode w in ways) {
+
+			if (!w.InnerXml.Contains ("addr:housenumber") && !w.InnerXml.Contains ("building:level")) {
+				continue;
+			}
+
+			XmlNode noderef = w.SelectSingleNode ("nd");
+			string refid = noderef.Attributes [0].Value;
+			Node n = nodelist [refid];
+
+			if (n == null) {
+				continue;
+			}
+
+			float lon = n.Lon;
+			float lat = n.Lat;
+			Vector2 p = new Vector2 ((lon - minlon)*scale, (lat - minlat)*scale);
+			bool done = false;
+			for (int i = 0; i < subdivisionsx; i++) {
+				done = false;
+				for (int j = 0; j < subdivisionsy; j++) {
+					if (areas [i, j].containsPoint (p)) {
+						areas [i, j].regionwaynodes.Add (w);
 						done = true;
 						break;
 					}
@@ -549,6 +711,7 @@ public class LoadMap : MonoBehaviour {
 		cube.transform.position = new Vector3 (width/2, -0.6f, height/2);
 		cube.transform.localScale = new Vector3 (width, 1f, height);
 		cube.transform.name = "Ground";
+		cube.tag = "Prefab";
 	}
 
 	public Vector2 getMins() {
@@ -595,6 +758,7 @@ public class LoadMap : MonoBehaviour {
 					cube.transform.position = new Vector3 (a.getHalfX (), 0f, a.getHalfY ());
 					cube.transform.localScale = new Vector3 (a.getWidth (), 0.01f, a.getHeight ());
 					cube.name = "Land";
+					cube.tag = "Prefab";
 
 					MeshRenderer mr = cube.GetComponent<MeshRenderer> ();
 					mr.material = m;
@@ -607,6 +771,7 @@ public class LoadMap : MonoBehaviour {
 					cube.transform.position = new Vector3 (a.getHalfX (), 0f, a.getHalfY ());
 					cube.transform.localScale = new Vector3 (a.getWidth (), 0.01f, a.getHeight ());
 					cube.name = "Water";
+					cube.tag = "Prefab";
 
 					MeshRenderer mr = cube.GetComponent<MeshRenderer> ();
 					mr.material = m;
@@ -619,6 +784,7 @@ public class LoadMap : MonoBehaviour {
 					waterbase.transform.position = new Vector3 (a.getHalfX (), 0f, a.getHalfY ());
 					waterbase.transform.localScale = new Vector3 (a.getWidth (), 0.01f, a.getHeight ());
 					waterbase.name = "Water";
+					waterbase.tag = "Prefab";
 
 					MeshRenderer watermr = waterbase.GetComponent<MeshRenderer> ();
 					watermr.material = blue;
@@ -633,6 +799,7 @@ public class LoadMap : MonoBehaviour {
 						GameObject cube = Instantiate(Resources.Load ("Prefabs/Cube", typeof(GameObject)) as GameObject);
 						cube.transform.position = new Vector3 (0, 0.01f, 0);
 						cube.name = "Coast";
+						cube.tag = "Prefab";
 
 						MeshFilter mf = cube.GetComponent<MeshFilter>();
 						mf.mesh = msh;
@@ -649,3 +816,4 @@ public class LoadMap : MonoBehaviour {
 	}
 
 }
+	
