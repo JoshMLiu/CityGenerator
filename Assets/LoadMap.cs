@@ -35,7 +35,6 @@ public class LoadMap : MonoBehaviour {
 
 		XmlNodeList ways = doc.GetElementsByTagName ("way");
 
-		//createGround ();
 		initializeTerrain ();
 		initializeWater ();
 
@@ -75,17 +74,10 @@ public class LoadMap : MonoBehaviour {
 
 	}
 
-
-	public void generateRoads() {
-
-
-
-	}
-
 	public void setStatistics() {
 
-		List<XmlNode> randomnodes = new List<XmlNode>();
-		List<XmlNode> randomways = new List<XmlNode>();
+		List<List<XmlNode>> randomnodes = new List<List<XmlNode>>();
+		List<List<XmlNode>> randomways = new List<List<XmlNode>>();
 
 		int totallcount = 0;
 		for (int j = 0; j < subdivisionsy; j += areasperstat) {
@@ -107,11 +99,11 @@ public class LoadMap : MonoBehaviour {
 					}
 				}
 
-				if (lcount > (areasperstat * areasperstat) / 3) {
-					randomnodes = new List<XmlNode>();
-					randomways = new List<XmlNode>();
+				if (lcount > (areasperstat * areasperstat) / 4) {
+					randomnodes = new List<List<XmlNode>>();
+					randomways = new List<List<XmlNode>>();
 				}
-					
+
 				for (int k = 0; k < areasperstat; k++) {
 					for (int p = 0; p < areasperstat; p++) {
 						if (i + k >= subdivisionsx || j + p >= subdivisionsy) {
@@ -120,27 +112,16 @@ public class LoadMap : MonoBehaviour {
 						Area a = areas [i + k, j + p];
 						if (a.type == Area.Type.LAND) {
 							
-							if (lcount <= (areasperstat * areasperstat) / 3) {
-								if (randomnodes.Count != 0 && randomways.Count != 0) {
-									a.regionnodes = randomnodes;
-									a.regionwaynodes = randomways;
-								}
+							if (lcount <= (areasperstat * areasperstat) / 4) {
+
+								int randnindex = Random.Range (0, randomnodes.Count);
+								int randwindex = Random.Range (0, randomways.Count);
+								a.regionnodes = randomnodes[randnindex];
+								a.regionwaynodes = randomways[randwindex];
+
 							} else {
-
-								float ratio = 1/ (float)lcount;
-								foreach (XmlNode x in a.regionnodes) {
-									float rand = Random.Range (0f, 1f);
-									if (rand <= ratio) {
-										randomnodes.Add (x);
-									}
-								}
-								foreach (XmlNode w in a.regionwaynodes) {
-									float rand = Random.Range (0f, 1f);
-									if (rand <= ratio) {
-										randomways.Add (w);
-									}
-								}
-
+								randomnodes.Add (a.regionnodes);
+								randomways.Add (a.regionwaynodes);
 							}
 
 							stat.addArea (a);
@@ -148,7 +129,7 @@ public class LoadMap : MonoBehaviour {
 						}
 					}
 				}
-
+					
 				stat.compileData ();
 				stat.landcount = lcount;
 
@@ -218,27 +199,44 @@ public class LoadMap : MonoBehaviour {
 
 					Statistics.AreaType atype = s.stats.getRandomAreaType ();
 						
-					Material mat = Resources.Load ("Materials/Black") as Material;
+					Material mat = Resources.Load ("Materials/LightGrey") as Material;
 					string name = "";
 
 					if (atype == Statistics.AreaType.BUILDINGS) {
 
-						mat = Resources.Load ("Materials/Black") as Material;
+						mat = Resources.Load ("Materials/Pavement") as Material;
 						name = "Buildings";
 
-						List<Mesh> buildingmeshes = s.getBuildingMeshes (outputchance);
+						List<MeshPack> buildingmeshes = s.getBuildingMeshes (outputchance);
 
-						foreach (Mesh bmesh in buildingmeshes) {
+						foreach (MeshPack mp in buildingmeshes) {
+
+							Mesh bmesh = mp.mesh;
+							Material bmat = Resources.Load ("Materials/Black") as Material;
+
+							if (mp.btype == Statistics.BuildingType.TOWER) {
+								bmat = Resources.Load ("Materials/LightGrey") as Material;
+							} else if (mp.btype == Statistics.BuildingType.HOUSE) {
+								bmat = Resources.Load ("Materials/Grey") as Material;
+							} else if (mp.btype == Statistics.BuildingType.FOOD) {
+								bmat = Resources.Load ("Materials/Red") as Material;
+							} else if (mp.btype == Statistics.BuildingType.SCHOOL) {
+								bmat = Resources.Load ("Materials/Yellow") as Material;
+							} else if (mp.btype == Statistics.BuildingType.SHOP) {
+								bmat = Resources.Load ("Materials/LightBlue") as Material;
+							} else if (mp.btype == Statistics.BuildingType.PLACEOFWORSHIP) {
+								bmat = Resources.Load ("Materials/White") as Material;
+							}
 
 							GameObject b = Instantiate(Resources.Load ("Prefabs/Cube", typeof(GameObject)) as GameObject);
-							b.transform.position = new Vector3 (0, 1.01f, 0);
+							b.transform.position = new Vector3 (0, 0.5f, 0);
 							b.name = "inst";
 							b.tag = "Prefab";
 
 							MeshFilter bmf = b.GetComponent<MeshFilter>();
 							bmf.mesh = bmesh;
 							MeshRenderer bmr = b.GetComponent<MeshRenderer> ();
-							bmr.sharedMaterial = mat;
+							bmr.sharedMaterial = bmat;
 
 						}
 
@@ -253,17 +251,37 @@ public class LoadMap : MonoBehaviour {
 						Statistics.OtherType othertype = s.stats.getRandomOther ();
 
 						if (othertype == Statistics.OtherType.PARKING) {
-							mat = Resources.Load ("Materials/Grey") as Material;
+							mat = Resources.Load ("Materials/AlmostBlack") as Material;
 							name = "Parking Lot";
 						} else {
-							mat = Resources.Load ("Materials/Blue") as Material;
+
+							if (othertype == Statistics.OtherType.ATTRACTION) {
+								mat = Resources.Load ("Materials/Blue") as Material;
+							} else if (othertype == Statistics.OtherType.LEISURE) {
+								mat = Resources.Load ("Materials/Orange") as Material;
+							} else {
+								mat = Resources.Load ("Materials/Black") as Material;
+							}
+
 							name = "Other";
+							Mesh omesh = s.getOtherMesh (othertype);
+
+							GameObject o = Instantiate(Resources.Load ("Prefabs/Cube", typeof(GameObject)) as GameObject);
+							o.transform.position = new Vector3 (0, 0.4f, 0);
+							o.name = "inst";
+							o.tag = "Prefab";
+
+							MeshFilter omf = o.GetComponent<MeshFilter>();
+							omf.mesh = omesh;
+							MeshRenderer omr = o.GetComponent<MeshRenderer> ();
+							omr.sharedMaterial = mat;
+
 						}
 							
 					}
 
 					GameObject cube = Instantiate(Resources.Load ("Prefabs/Cube", typeof(GameObject)) as GameObject);
-					cube.transform.position = new Vector3 (0, 1f, 0);
+					cube.transform.position = new Vector3 (0, 0.701f, 0);
 					cube.name = name;
 					cube.tag = "Prefab";
 
@@ -271,7 +289,7 @@ public class LoadMap : MonoBehaviour {
 					mf.mesh = m;
 					MeshRenderer mr = cube.GetComponent<MeshRenderer> ();
 					mr.sharedMaterial = mat;
-
+						
 				}
 			}
 		}
@@ -297,16 +315,19 @@ public class LoadMap : MonoBehaviour {
 				int areay = (int)Mathf.Floor (((float)x / (float)height)*(float)subdivisionsy);
 
 				if (areas [areax, areay].type == Area.Type.LAND) {
-					float h = Mathf.PerlinNoise (x, y)/1.2f;
-					heights [i, j] = 0.5f + h;
+					heights [i, j] = 0.7f;
 				} else if (areas [areax, areay].type == Area.Type.COAST) {
 					if (areas [areax, areay].containsPointInMesh (new Vector2 (y, x))) {
-						float h = Mathf.PerlinNoise (x, y)/1.2f;
+						float h = Mathf.PerlinNoise (x, y)/1.4f;
 						Vector2 offset = new Vector2 (areas [areax, areay].getHalfX (), areas [areax, areay].getHalfY ()) - new Vector2 (y, x);
-						float dist = offset.magnitude;
-						heights [i, j] = 0.5f + h - 1f/dist;
+						float dist = 1.3f*offset.magnitude;
+						float final = 0.7f + h - 1.6f/dist;
+						if (final > 0.7f) {
+							final = 0.7f;
+						}
+						heights [i, j] = final;
 					} else {
-						float h = Mathf.PerlinNoise (x, y)/1.2f;
+						float h = Mathf.PerlinNoise (x, y)/1.3f;
 						heights [i, j] = h - 0.45f;
 					}
 				}
@@ -319,6 +340,28 @@ public class LoadMap : MonoBehaviour {
 		}
 		data.SetHeights (0, 0, heights);
 
+		float[,,] splatmapData = new float[data.alphamapWidth, data.alphamapHeight, data.alphamapLayers];
+		for (int y = 0; y < data.alphamapHeight; y++)
+		{
+			for (int x = 0; x < data.alphamapWidth; x++)
+			{
+
+				float px = (float)x * (width / (float)data.alphamapWidth);
+				float py = (float)y * (height / (float)data.alphamapHeight);
+
+				int i = (int)Mathf.Floor ((float)py / (height / (float)subdivisionsx));
+				int j = (int)Mathf.Floor ((float)px / (width / (float)subdivisionsy));
+
+				if (areas [i, j].type == Area.Type.COAST) {
+					splatmapData [x, y, 0] = 1f;
+					splatmapData [x, y, 1] = 0;
+				} else {
+					splatmapData [x, y, 1] = 1f;
+					splatmapData [x, y, 0] = 0;
+				}
+			}
+		}
+		data.SetAlphamaps (0, 0, splatmapData);
 	}
 		
 	public void initializeTerrain() {

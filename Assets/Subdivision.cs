@@ -8,6 +8,7 @@ public class Subdivision {
 	public Vector3[] points;
 	float streetwidth;
 	public Statistics stats;
+	public Vector2 midpoint;
 
 	public Subdivision(Vector2 topleft, Vector2 topright, Vector2 botleft, Vector2 botright, float sw) {
 
@@ -32,6 +33,10 @@ public class Subdivision {
 		points [2] = new Vector3(botleft.x + streetwidth, 0, botleft.y + streetwidth);
 		points [3] = new Vector3 (botright.x - streetwidth, 0, botright.y + streetwidth);
 
+		float midpointx = ((points [0].x + points [3].x) / 2 + (points [1].x + points [2].x) / 2) / 2;
+		float midpointy = ((points [0].y + points [3].y) / 2 + (points [1].y + points [2].y) / 2) / 2;
+		midpoint = new Vector2 (midpointx, midpointy);
+
 		mesh = new Mesh ();
 		createMesh ();
 
@@ -55,9 +60,9 @@ public class Subdivision {
 		mesh.RecalculateBounds ();
 	}
 
-	public List<Mesh> getBuildingMeshes(float outputchance) {
+	public List<MeshPack> getBuildingMeshes(float outputchance) {
 
-		List<Mesh> meshes = new List<Mesh> ();
+		List<MeshPack> meshes = new List<MeshPack> ();
 
 		float minx = Mathf.Min (points [0].x, points [2].x);
 		float maxx = Mathf.Max (points [1].x, points [3].x);
@@ -100,14 +105,18 @@ public class Subdivision {
 						float rand = Random.Range (0f, 1f);
 						if (rand <= outputchance) {
 							float h = (float)stats.getRandomTowerHeight ();
-							meshes.Add(createBuildingMesh(tl, tr, bl, br, h/10));
+							MeshPack mp = new MeshPack (createBuildingMesh (tl, tr, bl, br, h / 10 + 0.2f));
+							mp.btype = btype;
+							meshes.Add(mp);
 						}
 
 					} else {
 						float rand = Random.Range (0f, 1f);
 						if (rand <= outputchance) {
-							float randheight = Random.Range (0.3f, 0.9f);
-							meshes.Add (createBuildingMesh (tl, tr, bl, br, randheight));
+							float randheight = Random.Range (0.4f, 1f);
+							MeshPack mp = new MeshPack (createBuildingMesh (tl, tr, bl, br, randheight));
+							mp.btype = btype;
+							meshes.Add (mp);
 						}
 					}		
 				}
@@ -117,6 +126,86 @@ public class Subdivision {
 		}
 
 		return meshes;
+	}
+
+	public Mesh getOtherMesh(Statistics.OtherType otype) {
+
+		if (otype == Statistics.OtherType.LEISURE || otype == Statistics.OtherType.ATTRACTION) {
+
+			float randheight = Random.Range (0.5f, 0.8f);
+			Vector2 tl = new Vector2 (points [0].x + streetwidth/2, points [0].z - streetwidth/2);
+			Vector2 tr = new Vector2 (points [1].x - streetwidth/2, points [1].z - streetwidth/2);
+			Vector2 bl = new Vector2 (points [2].x + streetwidth/2, points [2].z + streetwidth/2);
+			Vector2 br = new Vector2 (points [3].x - streetwidth/2, points [3].z + streetwidth/2);
+			return createBuildingMesh (tl, tr, bl, br, randheight);
+
+		} else if (otype == Statistics.OtherType.FUEL) {
+
+			Debug.Log ("fuel");
+
+			int randside = Random.Range (0, 4);
+
+			if (randside == 0) {
+				// left
+				float randlength = Random.Range(0.8f, 1.6f);
+				Vector2 tl = new Vector2(points [0].x, points[0].z);
+				Vector2 temptr = new Vector2 (points [1].x, points [1].z);
+				Ray r1 = new Ray (tl, (temptr - tl).normalized);
+				Vector2 tr = r1.GetPoint(randlength);
+				Vector2 bl = new Vector2 (points [2].x, points [2].z);
+				Vector2 tempbr = new Vector2 (points [3].x, points [3].z);
+				Ray r2 = new Ray (bl, (tempbr - bl).normalized);
+				Vector2 br = r2.GetPoint (randlength);
+
+				float randheight = Random.Range (0.5f, 0.8f);
+				return createBuildingMesh (tl, tr, bl, br, randheight);
+			} else if (randside == 1) {
+				// right
+				float randlength = Random.Range(0.8f, 1.6f);
+				Vector2 tr = new Vector2(points [1].x, points[1].z);
+				Vector2 temptl = new Vector2 (points [0].x, points [0].z);
+				Ray r1 = new Ray (tr, (temptl - tr).normalized);
+				Vector2 tl = r1.GetPoint(randlength);
+				Vector2 br = new Vector2(points [3].x, points[3].z);
+				Vector2 tempbl = new Vector2 (points [2].x, points [2].z);
+				Ray r2 = new Ray (br, (tempbl - br).normalized);
+				Vector2 bl = r2.GetPoint (randlength);
+
+				float randheight = Random.Range (0.5f, 0.8f);
+				return createBuildingMesh (tl, tr, bl, br, randheight);
+			} else if (randside == 2) {
+				// top
+				float randlength = Random.Range(0.8f, 1.6f);
+				Vector2 tl = new Vector2(points [0].x, points[0].z);
+				Vector2 tempbl = new Vector2 (points [2].x, points [2].z);
+				Ray r1 = new Ray (tl, (tempbl - tl).normalized);
+				Vector2 bl = r1.GetPoint(randlength);
+				Vector2 tr = new Vector2(points [1].x, points[1].z);
+				Vector2 tempbr = new Vector2 (points [3].x, points [3].z);
+				Ray r2 = new Ray (tr, (tempbr - tr).normalized);
+				Vector2 br = r2.GetPoint (randlength);
+
+				float randheight = Random.Range (0.5f, 0.8f);
+				return createBuildingMesh (tl, tr, bl, br, randheight);
+			} else if (randside == 3) {
+				// bot
+				float randlength = Random.Range(0.8f, 1.6f);
+				Vector2 bl = new Vector2(points [2].x, points[2].z);
+				Vector2 temptl = new Vector2 (points [0].x, points [0].z);
+				Ray r1 = new Ray (bl, (temptl - bl).normalized);
+				Vector2 tl = r1.GetPoint(randlength);
+				Vector2 br = new Vector2(points [3].x, points[3].z);
+				Vector2 temptr = new Vector2 (points [1].x, points [1].z);
+				Ray r2 = new Ray (br, (temptr - br).normalized);
+				Vector2 tr = r2.GetPoint (randlength);
+
+				float randheight = Random.Range (0.5f, 0.8f);
+				return createBuildingMesh (tl, tr, bl, br, randheight);
+			}
+
+		}
+		return new Mesh ();
+
 	}
 
 	public Mesh createBuildingMesh(Vector2 p1, Vector2 p2, Vector2 p3, Vector2 p4, float height) {
