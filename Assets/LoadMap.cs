@@ -112,7 +112,7 @@ public class LoadMap : MonoBehaviour {
 						Area a = areas [i + k, j + p];
 						if (a.type == Area.Type.LAND) {
 							
-							if (lcount <= (areasperstat * areasperstat) / 4) {
+							if (lcount <= (areasperstat * areasperstat) / 4 && randomnodes.Count > 0 && randomways.Count > 0) {
 
 								int randnindex = Random.Range (0, randomnodes.Count);
 								int randwindex = Random.Range (0, randomways.Count);
@@ -151,6 +151,14 @@ public class LoadMap : MonoBehaviour {
 			}
 		}
 		totallandcount = totallcount;
+
+	}
+
+	public void createBridges() {
+
+	}
+
+	public List<Area> getLandmass(int i, int j) {
 
 	}
 
@@ -201,6 +209,10 @@ public class LoadMap : MonoBehaviour {
 						
 					Material mat = Resources.Load ("Materials/LightGrey") as Material;
 					string name = "";
+
+					if (s.isempty) {
+						goto Skip;
+					}
 
 					if (atype == Statistics.AreaType.BUILDINGS) {
 
@@ -279,6 +291,8 @@ public class LoadMap : MonoBehaviour {
 						}
 							
 					}
+
+					Skip:
 
 					GameObject cube = Instantiate(Resources.Load ("Prefabs/Cube", typeof(GameObject)) as GameObject);
 					cube.transform.position = new Vector3 (0, 0.701f, 0);

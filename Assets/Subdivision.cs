@@ -9,24 +9,12 @@ public class Subdivision {
 	float streetwidth;
 	public Statistics stats;
 	public Vector2 midpoint;
+	public bool isempty;
 
 	public Subdivision(Vector2 topleft, Vector2 topright, Vector2 botleft, Vector2 botright, float sw) {
 
 		points = new Vector3[4];
 		streetwidth = sw;
-
-		if (topright.x - topleft.x <= 3*streetwidth) {
-			return;
-		}
-		if (botright.x - botleft.x <= 3*streetwidth) {
-			return;
-		}
-		if (topleft.y - botleft.y <= 3*streetwidth) {
-			return;
-		}
-		if (topright.y - botright.y <= 3*streetwidth) {
-			return;
-		}
 
 		points [0] = new Vector3(topleft.x + streetwidth, 0, topleft.y - streetwidth);
 		points [1] = new Vector3(topright.x - streetwidth, 0, topright.y - streetwidth);
@@ -39,7 +27,25 @@ public class Subdivision {
 
 		mesh = new Mesh ();
 		createMesh ();
+		isempty = false;
 
+		if (topright.x - topleft.x <= 3*streetwidth) {
+			isempty = true;
+			return;
+		}
+		if (botright.x - botleft.x <= 3*streetwidth) {
+			isempty = true;
+			return;
+		}
+		if (topleft.y - botleft.y <= 3*streetwidth) {
+			isempty = true;
+			return;
+		}
+		if (topright.y - botright.y <= 3*streetwidth) {
+			isempty = true;
+			return;
+		}
+			
 		stats = new Statistics ();
 	}
 
@@ -64,11 +70,17 @@ public class Subdivision {
 
 		List<MeshPack> meshes = new List<MeshPack> ();
 
-		float minx = Mathf.Min (points [0].x, points [2].x);
-		float maxx = Mathf.Max (points [1].x, points [3].x);
+		Vector3[] temppoints = new Vector3[4];
+		temppoints [0] = points [0] + new Vector3 (streetwidth / 2, 0, -streetwidth / 2);
+		temppoints [1] = points [1] + new Vector3 (-streetwidth / 2, 0, -streetwidth / 2);
+		temppoints [2] = points [2] + new Vector3 (streetwidth / 2, 0, streetwidth / 2);
+		temppoints [3] = points [3] + new Vector3 (-streetwidth / 2, 0, streetwidth / 2);
 
-		float miny = Mathf.Min (points [2].z, points [3].z);
-		float maxy = Mathf.Max (points [0].z, points [1].z);
+		float minx = Mathf.Min (temppoints [0].x, temppoints [2].x);
+		float maxx = Mathf.Max (temppoints [1].x, temppoints [3].x);
+
+		float miny = Mathf.Min (temppoints [2].z, temppoints [3].z);
+		float maxy = Mathf.Max (temppoints [0].z, temppoints [1].z);
 
 		float currentx = minx;
 		float currenty = maxy;
@@ -99,13 +111,107 @@ public class Subdivision {
 					Vector2 bl = new Vector2 (currentx, nexty);
 					Vector2 br = new Vector2 (nextx, nexty);
 
+					Vector2 newtl = tl;
+					Vector2 newtr = tr;
+					Vector2 newbl = bl;
+					Vector2 newbr = br;
+
 					Statistics.BuildingType btype = stats.getRandomBuilding ();
+
+					if (!containsPointInMesh (tl)) {
+
+						Vector3 intersectionpoint = new Vector3 ();
+						Vector2 line1dir = new Vector3 (tr.x, 0, tr.y) - new Vector3 (tl.x, 0, tl.y);
+						Math3d.LineLineIntersection (out intersectionpoint, new Vector3 (tl.x, 0, tl.y), line1dir, temppoints [0], temppoints [2] - temppoints [0]);
+						Vector2 point = new Vector2 (intersectionpoint.x + 0.001f, intersectionpoint.z);
+						if (containsPointInMesh (point) && tl.x <= point.x) {
+							newtl = point;
+						} else {
+							Vector2 point2 = Math3d.LineIntersectionPoint (new Vector2(temppoints [0].x, temppoints[0].z), new Vector2(temppoints [1].x, temppoints[1].z), tl, bl);
+							point2 = point2 + new Vector2(0, -0.001f);
+							if (containsPointInMesh (point2) && tl.y >= point2.y) {
+								newtl = point2;
+							}
+						}
+
+					}
+					if (!containsPointInMesh (tr)) {
+						Vector3 intersectionpoint = new Vector3 ();
+						Vector2 line1dir = new Vector3 (tl.x, 0, tl.y) - new Vector3 (tr.x, 0, tr.y);
+						Math3d.LineLineIntersection (out intersectionpoint, new Vector3 (tr.x, 0, tr.y), line1dir, temppoints [1], temppoints [3] - temppoints [1]);
+						Vector2 point = new Vector2 (intersectionpoint.x - 0.001f, intersectionpoint.z);
+						if (containsPointInMesh (point) && tr.x >= point.x) {
+							newtr = point;
+						} else {
+							Vector2 point2 = Math3d.LineIntersectionPoint (new Vector2(temppoints [1].x, temppoints[1].z), new Vector2(temppoints [0].x, temppoints[0].z), tr, br);
+							point2 = point2 + new Vector2(0, -0.001f);
+							if (containsPointInMesh (point2) && tr.y >= point2.y) {
+								newtr = point2;
+							}
+						} 
+
+					}
+					if (!containsPointInMesh (bl)) {
+						Vector3 intersectionpoint = new Vector3 ();
+						Vector2 line1dir = new Vector3 (br.x, 0, br.y) - new Vector3 (bl.x, 0, bl.y);
+						Math3d.LineLineIntersection (out intersectionpoint, new Vector3 (bl.x, 0, bl.y), line1dir, temppoints [2], temppoints [0] - temppoints [2]);
+						Vector2 point = new Vector2 (intersectionpoint.x + 0.001f, intersectionpoint.z);
+						if (containsPointInMesh (point) && bl.x <= point.x) {
+							newbl = point;
+						} else {
+							Vector2 point2 = Math3d.LineIntersectionPoint (new Vector2(temppoints [2].x, temppoints[2].z), new Vector2(temppoints [3].x, temppoints[3].z), bl, tl);
+							point2 = point2 + new Vector2(0, +0.001f);
+							if (containsPointInMesh (point2) && bl.y <= point2.y) {
+								newbl = point2;
+							}
+						} 
+
+					}
+					if (!containsPointInMesh (br)) {
+						Vector3 intersectionpoint = new Vector3 ();
+						Vector2 line1dir = new Vector3 (bl.x, 0, bl.y) - new Vector3 (br.x, 0, br.y);
+						Math3d.LineLineIntersection (out intersectionpoint, new Vector3 (br.x, 0, br.y), line1dir, temppoints [3], temppoints [1] - temppoints [3]);
+						Vector2 point = new Vector2 (intersectionpoint.x - 0.001f, intersectionpoint.z);
+						if (containsPointInMesh (point) && br.x >= point.x) {
+							newbr = point;
+						} else {
+							Vector2 point2 = Math3d.LineIntersectionPoint (new Vector2(temppoints [3].x, temppoints[3].z), new Vector2(temppoints [2].x, temppoints[2].z), br, tr);
+							point2 = point2 + new Vector2(0, +0.001f);
+							if (containsPointInMesh (point2) && br.y <= point2.y) {
+								newbr = point2;
+							}
+						} 
+
+					}
+
+					if (pointInTriangle (new Vector2 (temppoints [0].x, temppoints [0].z), tl, tr, bl) || pointInTriangle (new Vector2 (temppoints [0].x, temppoints [0].z), bl, tr, br)) {
+						newtl = new Vector2 (temppoints [0].x, temppoints [0].z);
+					}
+					if (pointInTriangle (new Vector2 (temppoints [1].x, temppoints [1].z), tl, tr, bl) || pointInTriangle (new Vector2 (temppoints [1].x, temppoints [1].z), bl, tr, br)) {
+						newtr = new Vector2 (temppoints [1].x, temppoints [1].z);
+					}
+					if (pointInTriangle (new Vector2 (temppoints [2].x, temppoints [2].z), tl, tr, bl) || pointInTriangle (new Vector2 (temppoints [2].x, temppoints [2].z), bl, tr, br)) {
+						newbl = new Vector2 (temppoints [2].x, temppoints [2].z);
+					}	
+					if (pointInTriangle (new Vector2 (temppoints [3].x, temppoints [3].z), tl, tr, bl) || pointInTriangle (new Vector2 (temppoints [3].x, temppoints [3].z), bl, tr, br)) {
+						newbr = new Vector2 (temppoints [3].x, temppoints [3].z);
+					}
+
+					tl = newtl;
+					tr = newtr;
+					bl = newbl;
+					br = newbr;
+
+					Vector2 reducedtl = tl + new Vector2 (streetwidth / 4, -streetwidth / 4);
+					Vector2 reducedtr = tr + new Vector2 (-streetwidth / 4, -streetwidth / 4);
+					Vector2 reducedbl = bl + new Vector2 (streetwidth / 4, streetwidth / 4);
+					Vector2 reducedbr = br + new Vector2 (-streetwidth / 4, streetwidth / 4);
 
 					if (btype == Statistics.BuildingType.TOWER) {
 						float rand = Random.Range (0f, 1f);
 						if (rand <= outputchance) {
 							float h = (float)stats.getRandomTowerHeight ();
-							MeshPack mp = new MeshPack (createBuildingMesh (tl, tr, bl, br, h / 10 + 0.2f));
+							MeshPack mp = new MeshPack (createBuildingMesh (reducedtl, reducedtr, reducedbl, reducedbr, h / 10 + 0.2f));
 							mp.btype = btype;
 							meshes.Add(mp);
 						}
@@ -114,7 +220,7 @@ public class Subdivision {
 						float rand = Random.Range (0f, 1f);
 						if (rand <= outputchance) {
 							float randheight = Random.Range (0.4f, 1f);
-							MeshPack mp = new MeshPack (createBuildingMesh (tl, tr, bl, br, randheight));
+							MeshPack mp = new MeshPack (createBuildingMesh (reducedtl, reducedtr, reducedbl, reducedbr, randheight));
 							mp.btype = btype;
 							meshes.Add (mp);
 						}
@@ -140,14 +246,18 @@ public class Subdivision {
 			return createBuildingMesh (tl, tr, bl, br, randheight);
 
 		} else if (otype == Statistics.OtherType.FUEL) {
-
-			Debug.Log ("fuel");
-
+			
 			int randside = Random.Range (0, 4);
 
 			if (randside == 0) {
 				// left
-				float randlength = Random.Range(0.8f, 1.6f);
+
+				float dist = Mathf.Min ((points [0] - points [1]).magnitude, (points [2] - points [3]).magnitude);
+				if (dist < 1) {
+					return new Mesh ();
+				}
+
+				float randlength = dist/2 + Random.Range(-0.1f, 0.1f);
 				Vector2 tl = new Vector2(points [0].x, points[0].z);
 				Vector2 temptr = new Vector2 (points [1].x, points [1].z);
 				Ray r1 = new Ray (tl, (temptr - tl).normalized);
@@ -161,7 +271,12 @@ public class Subdivision {
 				return createBuildingMesh (tl, tr, bl, br, randheight);
 			} else if (randside == 1) {
 				// right
-				float randlength = Random.Range(0.8f, 1.6f);
+				float dist = Mathf.Min ((points [0] - points [1]).magnitude, (points [2] - points [3]).magnitude);
+				if (dist < 1) {
+					return new Mesh ();
+				}
+
+				float randlength = dist/2 + Random.Range(-0.1f, 0.1f);
 				Vector2 tr = new Vector2(points [1].x, points[1].z);
 				Vector2 temptl = new Vector2 (points [0].x, points [0].z);
 				Ray r1 = new Ray (tr, (temptl - tr).normalized);
@@ -175,7 +290,12 @@ public class Subdivision {
 				return createBuildingMesh (tl, tr, bl, br, randheight);
 			} else if (randside == 2) {
 				// top
-				float randlength = Random.Range(0.8f, 1.6f);
+				float dist = Mathf.Min ((points [0] - points [2]).magnitude, (points [1] - points [3]).magnitude);
+				if (dist < 1) {
+					return new Mesh ();
+				}
+
+				float randlength = dist/2 + Random.Range(-0.1f, 0.1f);
 				Vector2 tl = new Vector2(points [0].x, points[0].z);
 				Vector2 tempbl = new Vector2 (points [2].x, points [2].z);
 				Ray r1 = new Ray (tl, (tempbl - tl).normalized);
@@ -189,7 +309,12 @@ public class Subdivision {
 				return createBuildingMesh (tl, tr, bl, br, randheight);
 			} else if (randside == 3) {
 				// bot
-				float randlength = Random.Range(0.8f, 1.6f);
+				float dist = Mathf.Min ((points [0] - points [2]).magnitude, (points [1] - points [3]).magnitude);
+				if (dist < 1) {
+					return new Mesh ();
+				}
+
+				float randlength = dist/2 + Random.Range(-0.1f, 0.1f);
 				Vector2 bl = new Vector2(points [2].x, points[2].z);
 				Vector2 temptl = new Vector2 (points [0].x, points [0].z);
 				Ray r1 = new Ray (bl, (temptl - bl).normalized);
