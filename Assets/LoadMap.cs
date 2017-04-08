@@ -21,8 +21,23 @@ public class LoadMap : MonoBehaviour {
 
 	void Start () {
 
+		GameObject prev = GameObject.Find ("Go");
+		Information info = (Information)prev.GetComponent ("Information");
+		string mapname = "NewYork";
+
+		if (info != null) {
+			subdivisionsx = info.subdivisionsx;
+			landiterations = info.landiterations;
+			areasperstat = info.areasperstat;
+			landpercentage = info.landpercentage;
+			waterpercentage = info.waterpercentage;
+			mapname = info.mapname;
+		}
+		DestroyImmediate (prev);
+
+		TextAsset textAsset = (TextAsset) Resources.Load ("Maps/" + mapname);
 		XmlDocument doc = new XmlDocument ();
-		doc.Load(Application.dataPath + "/Resources/Maps/NewYork"); 
+		doc.LoadXml (textAsset.text);
 
 		setBounds(doc.GetElementsByTagName ("bounds") [0].Attributes);
 
@@ -41,19 +56,91 @@ public class LoadMap : MonoBehaviour {
 		divideNodes (nodelist, doc, ways);
 		setAreas (nodelist, ways);
 
-		// Debug
-		//System.Console.WriteLine ("original map");
-		//printAreas ();
+		GameObject cam = GameObject.Find ("Main Camera");
+		float elevation = (width / 2) / Mathf.Tan (31f); // half of camera field of view
+		cam.transform.position = new Vector3 (width / 2, -elevation, height / 2);
+		cam.transform.rotation = Quaternion.Euler (90, 0, 0);
+		GhostFreeRoamCamera ghost = (GhostFreeRoamCamera)cam.GetComponent ("GhostFreeRoamCamera");
+		ghost.allowMovement = false;
+		ghost.allowRotation = false;
 
-		changeLand ();
-		setCoasts ();
-		setStatistics ();
+	}
 
-		//renderAreas ();
-		setTerrain ();
+	public enum ExecutionPath
+	{
+		CHANGELAND,
+		COASTS,
+		TERRAIN,
+		SUBDIVISIONS,
+		BRIDGES,
+		DONE
+	}
 
-		subdivideAreas ();
-		renderSubdivisions ();
+	ExecutionPath path = ExecutionPath.CHANGELAND;
+	int changecounter = 0;
+	float timecounter = 0;
+	bool menu = false;
+
+	void Update() {
+
+		if (menu) {
+			print (unload.isDone);
+			if (unload != null && unload.isDone) {
+				Application.LoadLevel ("Loading");
+			} 
+			return;
+		}
+
+		if (Input.GetKey (KeyCode.M)) {
+			deleteAll ();
+			menu = true;
+		}
+		if (Input.GetKey (KeyCode.Escape)) {
+			deleteAll ();
+			Application.Quit ();
+		}
+
+		if (path == ExecutionPath.CHANGELAND) {
+			deleteAll ();
+			if (changecounter > 0) {
+				changeLand ();
+			}
+			renderAreas ();
+			changecounter++;
+			if (changecounter >= landiterations) {
+				path = ExecutionPath.COASTS;
+			}
+		} else if (path == ExecutionPath.COASTS) {
+			if (timecounter <= 2) {
+				timecounter += Time.deltaTime;
+				return;
+			}
+			timecounter = 0;
+			setCoasts ();
+			deleteAll ();
+			renderAreas ();
+			path = ExecutionPath.TERRAIN;
+		}
+		else if (path == ExecutionPath.TERRAIN) {
+			if (timecounter <= 2) {
+				timecounter += Time.deltaTime;
+				return;
+			}
+			deleteAll ();
+			setTerrain ();
+			path = ExecutionPath.SUBDIVISIONS;
+		} else if (path == ExecutionPath.SUBDIVISIONS) {
+			setStatistics ();
+			subdivideAreas ();
+			renderSubdivisions ();
+			path = ExecutionPath.BRIDGES;
+		} else if (path == ExecutionPath.BRIDGES) {
+			path = ExecutionPath.DONE;
+			GameObject cam = GameObject.Find ("Main Camera");
+			GhostFreeRoamCamera ghost = (GhostFreeRoamCamera)cam.GetComponent ("GhostFreeRoamCamera");
+			ghost.allowMovement = true;
+			ghost.allowRotation = true;
+		} 
 
 	}
 		
@@ -63,15 +150,16 @@ public class LoadMap : MonoBehaviour {
 
 	}
 
+	AsyncOperation unload;
+
 	void deleteAll() {
 
 		GameObject[] objs = GameObject.FindGameObjectsWithTag ("Prefab");
-		print (objs.Length);
 		foreach (GameObject o in objs) {
 			Destroy (o.gameObject);
 		}
-		Resources.UnloadUnusedAssets ();
-
+		unload = Resources.UnloadUnusedAssets ();
+	
 	}
 
 	public void setStatistics() {
@@ -133,11 +221,6 @@ public class LoadMap : MonoBehaviour {
 				stat.compileData ();
 				stat.landcount = lcount;
 
-				System.Console.WriteLine ("------------------------");
-				System.Console.WriteLine (i + " " + j);
-				stat.printStats ();
-				System.Console.WriteLine ("------------------------");
-
 				for (int k = 0; k < areasperstat; k++) {
 					for (int p = 0; p < areasperstat; p++) {
 						if (i + k >= subdivisionsx || j + p >= subdivisionsy) {
@@ -154,12 +237,25 @@ public class LoadMap : MonoBehaviour {
 
 	}
 
+	//TODO
 	public void createBridges() {
 
 	}
 
+	//TODO
 	public List<Area> getLandmass(int i, int j) {
 
+		List<Area> list = new List<Area> ();
+		for (int h = -1; h <= 1; h++) { 
+			for (int k = -1; k <= 1; k++) {
+				if (i + h >= 0 && i + h < subdivisionsx && j + k >= 0 && j + k < subdivisionsy) {
+					if (areas [i + h, j + k].type == Area.Type.LAND) {
+						list.Add (areas [i + h, j + k]);
+					}
+				}
+			}
+		}
+		return null;
 	}
 
 	public void subdivideAreas() {
@@ -442,96 +538,90 @@ public class LoadMap : MonoBehaviour {
 		}
 
 	}
-
+		
 	public void changeLand() {
 
-		for (int t = 0; t < landiterations; t++) {
+		char typeflag = 'C';
+		for (int i = 0; i < subdivisionsx; i++) {
+			for (int j = 0; j < subdivisionsy; j++) {
+				if (areas [i, j].type == Area.Type.COAST) {
+					float rand = Random.Range (0f, 1f);
+					if (!(rand > landpercentage + waterpercentage)) {
+						float innerrand = Random.Range (0f, 1f);
+						float totalratio = landpercentage + waterpercentage;
+						float landratio = landpercentage / totalratio;
 
-			char typeflag = 'C';
-			for (int i = 0; i < subdivisionsx; i++) {
-				for (int j = 0; j < subdivisionsy; j++) {
-					if (areas [i, j].type == Area.Type.COAST) {
-						float rand = Random.Range (0f, 1f);
-						if (!(rand > landpercentage + waterpercentage)) {
-							float innerrand = Random.Range (0f, 1f);
-							float totalratio = landpercentage + waterpercentage;
-							float landratio = landpercentage / totalratio;
-
-							if (innerrand <= landratio) {
-								areas [i, j].type = Area.Type.LAND;
-								typeflag = 'L';
-								for (int h = -1; h <= 1; h++) { 
-									for (int k = -1; k <= 1; k++) {
-										if (i + h >= 0 && i + h < subdivisionsx && j + k >= 0 && j + k < subdivisionsy) {
-											if (areas [i + h, j + k].type == Area.Type.LAND) {
-												areas[i, j].regionnodes = new List<XmlNode> ();
-												foreach (XmlNode x in areas[i + h, j + k].regionnodes) {
-													areas [i, j].regionnodes.Add (x);
-												}
-												areas [i, j].regionwaynodes = new List<XmlNode> ();
-												foreach (XmlNode w in areas[i + h, j + k].regionwaynodes) {
-													areas [i, j].regionwaynodes.Add (w);
-												}
+						if (innerrand <= landratio) {
+							areas [i, j].type = Area.Type.LAND;
+							typeflag = 'L';
+							for (int h = -1; h <= 1; h++) { 
+								for (int k = -1; k <= 1; k++) {
+									if (i + h >= 0 && i + h < subdivisionsx && j + k >= 0 && j + k < subdivisionsy) {
+										if (areas [i + h, j + k].type == Area.Type.LAND) {
+											areas[i, j].regionnodes = new List<XmlNode> ();
+											foreach (XmlNode x in areas[i + h, j + k].regionnodes) {
+												areas [i, j].regionnodes.Add (x);
+											}
+											areas [i, j].regionwaynodes = new List<XmlNode> ();
+											foreach (XmlNode w in areas[i + h, j + k].regionwaynodes) {
+												areas [i, j].regionwaynodes.Add (w);
 											}
 										}
 									}
 								}
 							}
-							else {
-								areas [i, j].type = Area.Type.WATER;
-								areas [i, j].regionnodes = new List<XmlNode> ();
-								areas [i, j].regionwaynodes = new List<XmlNode> ();
-								typeflag = 'W';
-							}
-						} 
-					}
+						}
+						else {
+							areas [i, j].type = Area.Type.WATER;
+							areas [i, j].regionnodes = new List<XmlNode> ();
+							areas [i, j].regionwaynodes = new List<XmlNode> ();
+							typeflag = 'W';
+						}
+					} 
 				}
 			}
+		}
 				
-			for (int i = 0; i < subdivisionsx; i++) {
-				for (int j = 0; j < subdivisionsy; j++) {
-					Area a = areas [i, j];
-					if (a.type == Area.Type.LAND) {
-						for (int h = -1; h <= 1; h++) { 
-							for (int k = -1; k <= 1; k++) {
-								if (i + h >= 0 && i + h < subdivisionsx && j + k >= 0 && j + k < subdivisionsy) {
-									if (areas [i + h, j + k].type == Area.Type.WATER) {
-										if (typeflag == 'L') {
-											areas [i + h, j + k].type = Area.Type.COAST;
-										} else if (typeflag == 'W') {
-											a.type = Area.Type.COAST;
-										}
+		for (int i = 0; i < subdivisionsx; i++) {
+			for (int j = 0; j < subdivisionsy; j++) {
+				Area a = areas [i, j];
+				if (a.type == Area.Type.LAND) {
+					for (int h = -1; h <= 1; h++) { 
+						for (int k = -1; k <= 1; k++) {
+							if (i + h >= 0 && i + h < subdivisionsx && j + k >= 0 && j + k < subdivisionsy) {
+								if (areas [i + h, j + k].type == Area.Type.WATER) {
+									if (typeflag == 'L') {
+										areas [i + h, j + k].type = Area.Type.COAST;
+									} else if (typeflag == 'W') {
+										a.type = Area.Type.COAST;
 									}
 								}
 							}
 						}
-					} 
-				}
+					}
+				} 
 			}
+		}
 
-			for (int i = 0; i < subdivisionsx; i++) {
-				for (int j = 0; j < subdivisionsy; j++) {
-					Area a = areas [i, j];
-					if (a.type == Area.Type.COAST) {
-						bool all = true;
-						for (int h = -1; h <= 1; h++) { 
-							for (int k = -1; k <= 1; k++) {
-								if (i + h >= 0 && i + h < subdivisionsx && j + k >= 0 && j + k < subdivisionsy) {
-									if (areas [i + h, j + k].type == Area.Type.LAND) {
-										all = false;
-									}
+		for (int i = 0; i < subdivisionsx; i++) {
+			for (int j = 0; j < subdivisionsy; j++) {
+				Area a = areas [i, j];
+				if (a.type == Area.Type.COAST) {
+					bool all = true;
+					for (int h = -1; h <= 1; h++) { 
+						for (int k = -1; k <= 1; k++) {
+							if (i + h >= 0 && i + h < subdivisionsx && j + k >= 0 && j + k < subdivisionsy) {
+								if (areas [i + h, j + k].type == Area.Type.LAND) {
+									all = false;
 								}
 							}
 						}
-						if (all) {
-							a.type = Area.Type.WATER;
-						}
-					} 
-				}
+					}
+					if (all) {
+						a.type = Area.Type.WATER;
+					}
+				} 
 			}
-
-			System.Console.WriteLine ("iteration: " + (t + 1));
-			printAreas ();
 		}
 
 	}
@@ -812,7 +902,7 @@ public class LoadMap : MonoBehaviour {
 					Material m = Resources.Load ("Materials/Green") as Material;
 
 					GameObject cube = Instantiate(Resources.Load ("Prefabs/Cube", typeof(GameObject)) as GameObject);
-					cube.transform.position = new Vector3 (a.getHalfX (), 0f, a.getHalfY ());
+					cube.transform.position = new Vector3 (a.getHalfX (), 5.01f, a.getHalfY ());
 					cube.transform.localScale = new Vector3 (a.getWidth (), 0.01f, a.getHeight ());
 					cube.name = "Land";
 					cube.tag = "Prefab";
@@ -825,7 +915,7 @@ public class LoadMap : MonoBehaviour {
 					Material m = Resources.Load ("Materials/Blue") as Material;
 
 					GameObject cube = Instantiate(Resources.Load ("Prefabs/Cube", typeof(GameObject)) as GameObject);
-					cube.transform.position = new Vector3 (a.getHalfX (), 0f, a.getHalfY ());
+					cube.transform.position = new Vector3 (a.getHalfX (), 5f, a.getHalfY ());
 					cube.transform.localScale = new Vector3 (a.getWidth (), 0.01f, a.getHeight ());
 					cube.name = "Water";
 					cube.tag = "Prefab";
@@ -838,7 +928,7 @@ public class LoadMap : MonoBehaviour {
 					Material blue = Resources.Load ("Materials/Blue") as Material;
 
 					GameObject waterbase = Instantiate(Resources.Load ("Prefabs/Cube", typeof(GameObject)) as GameObject);
-					waterbase.transform.position = new Vector3 (a.getHalfX (), 0f, a.getHalfY ());
+					waterbase.transform.position = new Vector3 (a.getHalfX (), 5f, a.getHalfY ());
 					waterbase.transform.localScale = new Vector3 (a.getWidth (), 0.01f, a.getHeight ());
 					waterbase.name = "Water";
 					waterbase.tag = "Prefab";
@@ -854,7 +944,7 @@ public class LoadMap : MonoBehaviour {
 					foreach (Mesh msh in meshes) {
 
 						GameObject cube = Instantiate(Resources.Load ("Prefabs/Cube", typeof(GameObject)) as GameObject);
-						cube.transform.position = new Vector3 (0, 0.01f, 0);
+						cube.transform.position = new Vector3 (0, 5.01f, 0);
 						cube.name = "Coast";
 						cube.tag = "Prefab";
 

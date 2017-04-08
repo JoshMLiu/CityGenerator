@@ -207,6 +207,14 @@ public class Subdivision {
 					Vector2 reducedbl = bl + new Vector2 (streetwidth / 4, streetwidth / 4);
 					Vector2 reducedbr = br + new Vector2 (-streetwidth / 4, streetwidth / 4);
 
+					float maxwidth = Mathf.Max (reducedtr.x - reducedtl.x, reducedbr.x - reducedbl.x);
+					float maxheight = Mathf.Max (reducedtl.y - reducedbl.y, reducedtr.y - reducedbr.y);
+
+					if (maxwidth < streetwidth || maxheight < streetwidth) {
+						currentx = nextx;
+						continue;
+					}
+
 					if (btype == Statistics.BuildingType.TOWER) {
 						float rand = Random.Range (0f, 1f);
 						if (rand <= outputchance) {
