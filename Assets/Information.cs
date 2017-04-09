@@ -6,8 +6,8 @@ using UnityEngine.UI;
 public class Information : MonoBehaviour {
 
 	MeshRenderer renderer;
-	public int subdivisionsx = 50; 
-	public int areasperstat = 10;
+	public int subdivisionsx = 40; 
+	public int areasperstat = 8;
 	public int landiterations = 0;
 
 	public float landpercentage = 0.5f;
@@ -31,6 +31,7 @@ public class Information : MonoBehaviour {
 
 	void OnMouseUp(){
 
+		// Get information from input fields
 		GameObject inputs = GameObject.Find ("Canvas");
 		foreach (Transform child in inputs.transform) {
 
@@ -68,7 +69,7 @@ public class Information : MonoBehaviour {
 			}
 
 		}
-
+		// Make object persist to main scene
 		GameObject.DontDestroyOnLoad (this);
 
 		Application.LoadLevel("Main");

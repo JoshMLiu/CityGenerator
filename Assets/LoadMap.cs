@@ -3,28 +3,36 @@ using System.Collections.Generic;
 using UnityEngine;
 using System.Xml;
 
+// Calculates and creates meshes for map in the Main Scene
 public class LoadMap : MonoBehaviour {
 
+	// Scale map data which is in latitudes/longitudes
 	public static float scale = 10000f;
-	public static int subdivisionsx = 50;
+	// Number of areas to divide the map into on the x axis
+	public static int subdivisionsx = 40;
+	// Number of land changing iterations to do
 	public static int landiterations = 0;
+	// Calculated based on x to get square grid
 	public int subdivisionsy;
+	// Chance of a coast turning into land or into water
 	public float landpercentage = 0.5f;
 	public float waterpercentage = 0.5f;
 
+	// Bounds of map
 	float minlat, minlon, maxlat, maxlon;
 	float width, height;
 
 	Area[,] areas;
-	int areasperstat = 10;
+	// Number of areas to include in each statistical area
+	int areasperstat = 8;
 	int totallandcount;
 
 	void Start () {
 
+		// Take information parsed from the menu
 		GameObject prev = GameObject.Find ("Go");
 		Information info = (Information)prev.GetComponent ("Information");
 		string mapname = "NewYork";
-
 		if (info != null) {
 			subdivisionsx = info.subdivisionsx;
 			landiterations = info.landiterations;
@@ -35,27 +43,31 @@ public class LoadMap : MonoBehaviour {
 		}
 		DestroyImmediate (prev);
 
+		// Load map
 		TextAsset textAsset = (TextAsset) Resources.Load ("Maps/" + mapname);
 		XmlDocument doc = new XmlDocument ();
 		doc.LoadXml (textAsset.text);
 
+		// Calculate bounds
 		setBounds(doc.GetElementsByTagName ("bounds") [0].Attributes);
 
+		// Number of rows is based on width of columns
 		float ratio = (float)height / (float)width;
 		subdivisionsy = (int)Mathf.Ceil (ratio * ((float)subdivisionsx));
 		areas = new Area[subdivisionsx, subdivisionsy];
 
 		Dictionary<string, Node> nodelist = new Dictionary<string, Node> ();
 		setNodes (nodelist, doc);
-
 		XmlNodeList ways = doc.GetElementsByTagName ("way");
 
 		initializeTerrain ();
 		initializeWater ();
 
+		// Divide the nodes in the map into their respective areas
 		divideNodes (nodelist, doc, ways);
 		setAreas (nodelist, ways);
 
+		// Set camera position and lock movement
 		GameObject cam = GameObject.Find ("Main Camera");
 		float elevation = (width / 2) / Mathf.Tan (31f); // half of camera field of view
 		cam.transform.position = new Vector3 (width / 2, -elevation, height / 2);
@@ -66,6 +78,7 @@ public class LoadMap : MonoBehaviour {
 
 	}
 
+	// Plan to follow in the game loop
 	public enum ExecutionPath
 	{
 		CHANGELAND,
@@ -83,14 +96,15 @@ public class LoadMap : MonoBehaviour {
 
 	void Update() {
 
+		// Load menu
 		if (menu) {
-			print (unload.isDone);
 			if (unload != null && unload.isDone) {
 				Application.LoadLevel ("Loading");
 			} 
 			return;
 		}
 
+		// M -> back to menu. Esc -> exit.
 		if (Input.GetKey (KeyCode.M)) {
 			deleteAll ();
 			menu = true;
@@ -100,7 +114,9 @@ public class LoadMap : MonoBehaviour {
 			Application.Quit ();
 		}
 
+		// path
 		if (path == ExecutionPath.CHANGELAND) {
+			// do 1 coast iteration every loop
 			deleteAll ();
 			if (changecounter > 0) {
 				changeLand ();
@@ -111,10 +127,12 @@ public class LoadMap : MonoBehaviour {
 				path = ExecutionPath.COASTS;
 			}
 		} else if (path == ExecutionPath.COASTS) {
+			// wait 2 seconds
 			if (timecounter <= 2) {
 				timecounter += Time.deltaTime;
 				return;
 			}
+			// calculate the coasts and render the areas
 			timecounter = 0;
 			setCoasts ();
 			deleteAll ();
@@ -122,20 +140,26 @@ public class LoadMap : MonoBehaviour {
 			path = ExecutionPath.TERRAIN;
 		}
 		else if (path == ExecutionPath.TERRAIN) {
+			// wait 2 seconds
 			if (timecounter <= 2) {
 				timecounter += Time.deltaTime;
 				return;
 			}
+			// render terrain
 			deleteAll ();
 			setTerrain ();
 			path = ExecutionPath.SUBDIVISIONS;
 		} else if (path == ExecutionPath.SUBDIVISIONS) {
+			// Calculate subdivisions + buildings and render
 			setStatistics ();
 			subdivideAreas ();
 			renderSubdivisions ();
 			path = ExecutionPath.BRIDGES;
 		} else if (path == ExecutionPath.BRIDGES) {
+			// Calculate bridges and render
+			createBridges ();
 			path = ExecutionPath.DONE;
+			// unlock camera
 			GameObject cam = GameObject.Find ("Main Camera");
 			GhostFreeRoamCamera ghost = (GhostFreeRoamCamera)cam.GetComponent ("GhostFreeRoamCamera");
 			ghost.allowMovement = true;
@@ -150,8 +174,8 @@ public class LoadMap : MonoBehaviour {
 
 	}
 
+	// Delete all temporary objects and unload resources 
 	AsyncOperation unload;
-
 	void deleteAll() {
 
 		GameObject[] objs = GameObject.FindGameObjectsWithTag ("Prefab");
@@ -162,11 +186,14 @@ public class LoadMap : MonoBehaviour {
 	
 	}
 
+	// Calculate statistics for each area
 	public void setStatistics() {
 
+		// Lists of the nodes/ways from random areas
 		List<List<XmlNode>> randomnodes = new List<List<XmlNode>>();
 		List<List<XmlNode>> randomways = new List<List<XmlNode>>();
 
+		// For each statistical area
 		int totallcount = 0;
 		for (int j = 0; j < subdivisionsy; j += areasperstat) {
 			for (int i = 0; i < subdivisionsx; i += areasperstat) {
@@ -174,6 +201,7 @@ public class LoadMap : MonoBehaviour {
 				Statistics stat = new Statistics ();
 				int lcount = 0;
 
+				// Calculate the land ratio of the area (for building render chance)
 				for (int k = 0; k < areasperstat; k++) {
 					for (int p = 0; p < areasperstat; p++) {
 						if (i + k >= subdivisionsx || j + p >= subdivisionsy) {
@@ -187,11 +215,11 @@ public class LoadMap : MonoBehaviour {
 					}
 				}
 
+				// for all areas in the statistic
 				if (lcount > (areasperstat * areasperstat) / 4) {
 					randomnodes = new List<List<XmlNode>>();
 					randomways = new List<List<XmlNode>>();
 				}
-
 				for (int k = 0; k < areasperstat; k++) {
 					for (int p = 0; p < areasperstat; p++) {
 						if (i + k >= subdivisionsx || j + p >= subdivisionsy) {
@@ -199,28 +227,28 @@ public class LoadMap : MonoBehaviour {
 						}
 						Area a = areas [i + k, j + p];
 						if (a.type == Area.Type.LAND) {
-							
-							if (lcount <= (areasperstat * areasperstat) / 4 && randomnodes.Count > 0 && randomways.Count > 0) {
 
+							// If the statistical area has few land areas, take random sample nodes from other stat areas
+							if (lcount <= (areasperstat * areasperstat) / 4 && randomnodes.Count > 0 && randomways.Count > 0) {
 								int randnindex = Random.Range (0, randomnodes.Count);
 								int randwindex = Random.Range (0, randomways.Count);
 								a.regionnodes = randomnodes[randnindex];
 								a.regionwaynodes = randomways[randwindex];
-
 							} else {
+								// else add some nodes to the random list to be used next iteration
 								randomnodes.Add (a.regionnodes);
 								randomways.Add (a.regionwaynodes);
 							}
-
 							stat.addArea (a);
-
 						}
 					}
 				}
 					
+				// Calculates probabilities
 				stat.compileData ();
 				stat.landcount = lcount;
 
+				// Assign the statistic to each area it applies to
 				for (int k = 0; k < areasperstat; k++) {
 					for (int p = 0; p < areasperstat; p++) {
 						if (i + k >= subdivisionsx || j + p >= subdivisionsy) {
@@ -237,27 +265,139 @@ public class LoadMap : MonoBehaviour {
 
 	}
 
-	//TODO
 	public void createBridges() {
 
+		// Check if each area belongs to a new landmass (save), or an already recorded one.
+		List<List<Area>> landmasses = new List<List<Area>> ();
+		for (int i = 0; i < subdivisionsx; i++) {
+			for (int j = 0; j < subdivisionsy; j++) {
+				if (areas [i, j].type != Area.Type.LAND) {
+					continue;
+				}
+				bool skip = false;
+				foreach (List<Area> l in landmasses) {
+					if (l.Contains (areas [i, j])) {
+						skip = true;
+						break;
+					}
+				}
+				if (skip) {
+					continue;
+				}
+				List<Area> lands = new List<Area> ();
+				getLandmass (i, j, lands);
+				landmasses.Add (lands);
+			}
+		}
+
+		// Randomize the landmass list order 
+		List<List<Area>> shuffledlist = new List<List<Area>> ();
+		while (landmasses.Count > 0) {
+			int randindex = Random.Range (0, landmasses.Count);
+			List<Area> temp = landmasses[randindex];
+			landmasses.RemoveAt (randindex);
+			shuffledlist.Add (temp);
+		}
+			
+		// Until 1 landmass remaining: pick 2 landmasses, create a bridge between them, join them as 1 landmass, loop.
+		while (shuffledlist.Count > 1) {
+
+			List<Area> first = shuffledlist [0];
+			List<Area> second = shuffledlist [1];
+			shuffledlist.RemoveAt (0);
+			shuffledlist.RemoveAt (0);
+
+			// joined landmass
+			List<Area> newlist = new List<Area> ();
+			foreach (Area ar in first) {
+				newlist.Add (ar);
+			}
+			foreach (Area ar in second) {
+				newlist.Add (ar);
+			}
+			shuffledlist.Add (newlist);
+
+			// Get minimum distance points between the two landmasses
+			float mindist = float.MaxValue;
+			Vector2 firstpos = new Vector2();
+			Vector2 secondpos = new Vector2();
+			foreach (Area a in first) {
+				foreach (Area b in second) {
+					Vector2 halfa = new Vector2 (a.getHalfX (), a.getHalfY ());
+					Vector2 halfb = new Vector2 (b.getHalfX (), b.getHalfY ());
+
+					float dist = (halfb - halfa).magnitude;
+					if (dist < mindist) {
+						mindist = dist;
+						firstpos = halfa;
+						secondpos = halfb;
+					}
+				}
+			}
+
+			// Bridge is too short
+			if (mindist < width/8f) {
+				continue;
+			}
+
+			Vector2 toppos;
+			Vector2 botpos;
+
+			// Get the higher and lower points on the map
+			if (firstpos.y >= secondpos.y) {
+				toppos = firstpos;
+				botpos = secondpos;
+			} else {
+				toppos = secondpos;
+				botpos = firstpos;
+			}
+				
+			Material mat = Resources.Load ("Materials/Grey") as Material;
+			//width of bridge
+			float bwidth = areas [0, 0].getWidth ()/4;
+
+			// render the bridge
+			float o = (toppos.x - botpos.x) / 2;
+			float h = mindist / 2;
+			float rot = Mathf.Asin (o / h);
+			float degrees = Mathf.Rad2Deg * rot;
+
+			Vector2 half = new Vector2 ((toppos.x + botpos.x) / 2, (toppos.y + botpos.y) / 2);
+
+			GameObject bridge = Instantiate(Resources.Load ("Prefabs/Cube", typeof(GameObject)) as GameObject);
+			bridge.transform.position = new Vector3 (half.x, 0.69f, half.y);
+			bridge.transform.localScale = new Vector3 (bwidth, 0.01f, mindist);
+			bridge.transform.rotation = Quaternion.Euler (0, degrees, 0);
+			bridge.name = "bridge";
+			bridge.tag = "Prefab";
+
+			MeshRenderer bmr = bridge.GetComponent<MeshRenderer> ();
+			bmr.sharedMaterial = mat;
+
+		}
+
+
 	}
+		
+	// For an input land area, get all the areas that belong to the same landmass
+	public void getLandmass(int i, int j, List<Area> list) {
 
-	//TODO
-	public List<Area> getLandmass(int i, int j) {
-
-		List<Area> list = new List<Area> ();
+		list.Add (areas [i, j]);
 		for (int h = -1; h <= 1; h++) { 
 			for (int k = -1; k <= 1; k++) {
 				if (i + h >= 0 && i + h < subdivisionsx && j + k >= 0 && j + k < subdivisionsy) {
 					if (areas [i + h, j + k].type == Area.Type.LAND) {
-						list.Add (areas [i + h, j + k]);
+						if (!list.Contains(areas[i + h, j+ k])) {
+							getLandmass (i + h, j + k, list);
+						} 
 					}
 				}
 			}
 		}
-		return null;
+
 	}
 
+	// Sets random subdivsions for an area
 	public void subdivideAreas() {
 		for (int i = 0; i < subdivisionsx; i++) {
 			for (int j = 0; j < subdivisionsy; j++) {
@@ -282,12 +422,14 @@ public class LoadMap : MonoBehaviour {
 
 		for (int i = 0; i < subdivisionsx; i++) {
 			for (int j = 0; j < subdivisionsy; j++) {
+
 				Area a = areas [i, j];
+				// non land areas do not have subdivisions
 				if (a.type != Area.Type.LAND) {
 					continue;
 				}
 
-
+				// calculate the building spawn chance for every building spot in the subdivision
 				float avgnodesperarea = (((float) a.statistics.landcount / (float) totallandcount) * (float) totalnodecount)/(float) (areasperstat*areasperstat);
 				float nodecount = (float) areas [i, j].regionnodes.Count;
 				nodecount += (float)areas [i, j].regionwaynodes.Count;
@@ -301,11 +443,13 @@ public class LoadMap : MonoBehaviour {
 						continue;
 					}
 
+					// Based on calculated probabilities
 					Statistics.AreaType atype = s.stats.getRandomAreaType ();
 						
 					Material mat = Resources.Load ("Materials/LightGrey") as Material;
 					string name = "";
 
+					// Subdivision is too small for buildings
 					if (s.isempty) {
 						goto Skip;
 					}
@@ -315,6 +459,7 @@ public class LoadMap : MonoBehaviour {
 						mat = Resources.Load ("Materials/Pavement") as Material;
 						name = "Buildings";
 
+						// Get random building meshes and render them
 						List<MeshPack> buildingmeshes = s.getBuildingMeshes (outputchance);
 
 						foreach (MeshPack mp in buildingmeshes) {
@@ -350,12 +495,13 @@ public class LoadMap : MonoBehaviour {
 
 					}
 					else if (atype == Statistics.AreaType.NATURAL) {
-
+						// green ground
 						mat = Resources.Load ("Materials/Green") as Material;
 						name = "Natural";
 					}
 					else if (atype == Statistics.AreaType.OTHER) {
 
+						// Building that spans the entire subdivision area
 						Statistics.OtherType othertype = s.stats.getRandomOther ();
 
 						if (othertype == Statistics.OtherType.PARKING) {
@@ -390,6 +536,7 @@ public class LoadMap : MonoBehaviour {
 
 					Skip:
 
+					// render the ground 
 					GameObject cube = Instantiate(Resources.Load ("Prefabs/Cube", typeof(GameObject)) as GameObject);
 					cube.transform.position = new Vector3 (0, 0.701f, 0);
 					cube.name = name;
@@ -413,35 +560,73 @@ public class LoadMap : MonoBehaviour {
 		Terrain terrain = g.GetComponent<Terrain> ();
 		TerrainData data = terrain.terrainData;
 
+		// Height map
 		float[,] heights = new float[data.heightmapWidth, data.heightmapHeight];
 
+		// For each point in the heightmap
 		for (int i = 0; i < data.heightmapWidth; i++) {
 			for (int j = 0; j < data.heightmapHeight; j++) {
 
+				// Terrain coordinates are backwards... (swap x and y)
 				float x = ((float)i / (float)terrain.terrainData.heightmapWidth) * (float)height;
 				float y = ((float)j / (float)terrain.terrainData.heightmapHeight) * (float)width;
 
+				// get the area the point belongs to
 				int areax = (int)Mathf.Floor (((float)y / (float)width)*(float)subdivisionsx);
 				int areay = (int)Mathf.Floor (((float)x / (float)height)*(float)subdivisionsy);
 
 				if (areas [areax, areay].type == Area.Type.LAND) {
+					// land has constant height
 					heights [i, j] = 0.7f;
 				} else if (areas [areax, areay].type == Area.Type.COAST) {
+					// point is on land
 					if (areas [areax, areay].containsPointInMesh (new Vector2 (y, x))) {
+						
 						float h = Mathf.PerlinNoise (x, y)/1.4f;
-						Vector2 offset = new Vector2 (areas [areax, areay].getHalfX (), areas [areax, areay].getHalfY ()) - new Vector2 (y, x);
-						float dist = 1.3f*offset.magnitude;
-						float final = 0.7f + h - 1.6f/dist;
+						CoastMap cm = areas [areax, areay].coastmap;
+
+						float totaldist = (new Vector2 (areas [areax, areay].getMinX (), areas [areax, areay].getMinY ())
+						                  - new Vector2 (areas [areax, areay].getMaxX (), areas [areax, areay].getMaxY ())).magnitude;
+						Vector2 oppoint = new Vector2 ();
+
+						// Get a gradient for the coast height. Coast slopes down towards the water.
+						if (cm.bottom && cm.left) {
+							oppoint = new Vector2 (areas [areax, areay].getMaxX (), areas [areax, areay].getMaxY ());
+						} else if (cm.bottom && cm.right) {
+							oppoint = new Vector2 (areas [areax, areay].getMinX (), areas [areax, areay].getMaxY ());
+						} else if (cm.top && cm.left) {
+							oppoint = new Vector2 (areas [areax, areay].getMaxX (), areas [areax, areay].getMinY ());
+						} else if (cm.top && cm.right) {
+							oppoint = new Vector2 (areas [areax, areay].getMinX (), areas [areax, areay].getMinY ());
+						} else if (cm.left || cm.top || cm.right || cm.bottom) {
+							oppoint = new Vector2 (areas [areax, areay].getHalfX (), areas [areax, areay].getHalfY ());
+							if (cm.left || cm.right) {
+								totaldist = areas [areax, areay].getWidth () / 2;
+							} else {
+								totaldist = areas [areax, areay].getHeight () / 2;
+							}
+						} else if (cm.topleft || cm.topright || cm.bottomleft || cm.bottomright) {
+							oppoint = new Vector2 (areas [areax, areay].getHalfX (), areas [areax, areay].getHalfY ());
+							totaldist = totaldist / 2;
+						} 
+
+						float offset = (oppoint - new Vector2 (y, x)).magnitude;
+						float dist = ((totaldist - offset)/totaldist);
+						
+						// Calculate a height with the gradient and random perlin noise
+						float final = 0.7f + h - dist;
 						if (final > 0.7f) {
 							final = 0.7f;
 						}
 						heights [i, j] = final;
+
 					} else {
 						float h = Mathf.PerlinNoise (x, y)/1.3f;
 						heights [i, j] = h - 0.45f;
 					}
 				}
 				else {
+					// water has low constant height
 					heights [i, j] = 0;
 				}
 
@@ -450,6 +635,7 @@ public class LoadMap : MonoBehaviour {
 		}
 		data.SetHeights (0, 0, heights);
 
+		// Color terrain based on area type (land = road, other = ground);
 		float[,,] splatmapData = new float[data.alphamapWidth, data.alphamapHeight, data.alphamapLayers];
 		for (int y = 0; y < data.alphamapHeight; y++)
 		{
@@ -493,6 +679,7 @@ public class LoadMap : MonoBehaviour {
 
 	}
 
+	// For every coast, determine the side where it connects to the land (1 side, 2 sides, corner. etc...)
 	public void setCoasts() {
 
 		for (int i = 0; i < subdivisionsx; i++) {
@@ -539,6 +726,7 @@ public class LoadMap : MonoBehaviour {
 
 	}
 		
+	// 1 iteration of the random coast changing algorithm. Probabilities are specified by the user
 	public void changeLand() {
 
 		char typeflag = 'C';
@@ -546,17 +734,19 @@ public class LoadMap : MonoBehaviour {
 			for (int j = 0; j < subdivisionsy; j++) {
 				if (areas [i, j].type == Area.Type.COAST) {
 					float rand = Random.Range (0f, 1f);
+					// Don't change
 					if (!(rand > landpercentage + waterpercentage)) {
 						float innerrand = Random.Range (0f, 1f);
 						float totalratio = landpercentage + waterpercentage;
 						float landratio = landpercentage / totalratio;
-
+						// Change coast to land
 						if (innerrand <= landratio) {
 							areas [i, j].type = Area.Type.LAND;
 							typeflag = 'L';
 							for (int h = -1; h <= 1; h++) { 
 								for (int k = -1; k <= 1; k++) {
 									if (i + h >= 0 && i + h < subdivisionsx && j + k >= 0 && j + k < subdivisionsy) {
+										// Take nodes from all surrounding lands
 										if (areas [i + h, j + k].type == Area.Type.LAND) {
 											areas[i, j].regionnodes = new List<XmlNode> ();
 											foreach (XmlNode x in areas[i + h, j + k].regionnodes) {
@@ -571,7 +761,9 @@ public class LoadMap : MonoBehaviour {
 								}
 							}
 						}
+						// Change coast to water
 						else {
+							// Dump all nodes from this area
 							areas [i, j].type = Area.Type.WATER;
 							areas [i, j].regionnodes = new List<XmlNode> ();
 							areas [i, j].regionwaynodes = new List<XmlNode> ();
@@ -581,7 +773,9 @@ public class LoadMap : MonoBehaviour {
 				}
 			}
 		}
-				
+
+		// Change surrounding areas to correct types. If coast changed to land -> surrounding waters change to coasts
+		// If coast changed to water -> surrounding land turns to coasts
 		for (int i = 0; i < subdivisionsx; i++) {
 			for (int j = 0; j < subdivisionsy; j++) {
 				Area a = areas [i, j];
@@ -603,6 +797,7 @@ public class LoadMap : MonoBehaviour {
 			}
 		}
 
+		// If a coast does not touch land, turn it into water
 		for (int i = 0; i < subdivisionsx; i++) {
 			for (int j = 0; j < subdivisionsy; j++) {
 				Area a = areas [i, j];
@@ -626,8 +821,10 @@ public class LoadMap : MonoBehaviour {
 
 	}
 		
+	// Seperate all the nodes into their repective areas by location
 	public void divideNodes(Dictionary<string, Node> nodelist, XmlDocument doc, XmlNodeList ways) {
 
+		// Initialize areas
 		for (int i = 0; i < subdivisionsx; i++) {
 			for (int j = 0; j < subdivisionsy; j++) {
 				Area a = new Area (i * width / subdivisionsx, j * height / subdivisionsy, (i + 1) * width / subdivisionsx, (j + 1) * height / subdivisionsy);
@@ -644,6 +841,7 @@ public class LoadMap : MonoBehaviour {
 			for (int i = 0; i < subdivisionsx; i++) {
 				done = false;
 				for (int j = 0; j < subdivisionsy; j++) {
+					// Check if the area contains the node
 					if (areas [i, j].containsPoint (p)) {
 						areas [i, j].regionnodes.Add (n);
 						done = true;
@@ -657,6 +855,7 @@ public class LoadMap : MonoBehaviour {
 
 		foreach (XmlNode w in ways) {
 
+			// Only these two ways are wanted
 			if (!w.InnerXml.Contains ("addr:housenumber") && !w.InnerXml.Contains ("building:level")) {
 				continue;
 			}
@@ -689,8 +888,10 @@ public class LoadMap : MonoBehaviour {
 
 	}
 
+	// Initialize the types of the areas based on the map data
 	public void setAreas(Dictionary<string, Node> nodelist, XmlNodeList ways) {
 
+		// Get coasts
 		foreach (XmlNode w in ways) {
 			XmlNodeList children = w.ChildNodes;
 			if (w.InnerXml.Contains ("riverbank") || w.InnerXml.Contains ("coastline")) {
@@ -714,6 +915,7 @@ public class LoadMap : MonoBehaviour {
 			}
 		}
 
+		// If area is not a coast and has a sufficient amount of nodes, it is considered land
 		for (int i = 0; i < subdivisionsx; i++) {
 			for (int j = 0; j < subdivisionsy; j++) {
 				Area a = areas [i, j];
@@ -726,6 +928,7 @@ public class LoadMap : MonoBehaviour {
 			}
 		}
 
+		// Put coasts between land and water
 		for (int i = 0; i < subdivisionsx; i++) {
 			for (int j = 0; j < subdivisionsy; j++) {
 				Area a = areas [i, j];
@@ -743,6 +946,7 @@ public class LoadMap : MonoBehaviour {
 			}
 		}
 
+		// If coasts do not touch land, turn them to water
 		for (int i = 0; i < subdivisionsx; i++) {
 			for (int j = 0; j < subdivisionsy; j++) {
 				Area a = areas [i, j];
@@ -764,7 +968,7 @@ public class LoadMap : MonoBehaviour {
 			}
 		}
 
-		// single water patches
+		// Eliminate single water patches (water surrounded by only coasts)
 		for (int i = 0; i < subdivisionsx; i++) {
 			for (int j = 0; j < subdivisionsy; j++) {
 				Area a = areas [i, j];
@@ -795,7 +999,7 @@ public class LoadMap : MonoBehaviour {
 			}
 		}
 
-		// coasts to land
+		// If coasts do not touch water, turn to land
 		for (int i = 0; i < subdivisionsx; i++) {
 			for (int j = 0; j < subdivisionsy; j++) {
 				Area a = areas [i, j];
@@ -819,6 +1023,7 @@ public class LoadMap : MonoBehaviour {
 
 	}
 
+	// Get bounds from xml file
 	public void setBounds(XmlAttributeCollection c) {
 		foreach (XmlAttribute a in c) {
 			if (a.Name.Equals ("minlat"))
@@ -834,6 +1039,7 @@ public class LoadMap : MonoBehaviour {
 		width = (maxlon - minlon)*scale;
 	}
 
+	// Fill the node dictionary
 	public void setNodes(Dictionary<string, Node> d, XmlDocument doc) {
 		XmlNodeList nodes = doc.GetElementsByTagName ("node");
 		foreach (XmlNode n in nodes) {
@@ -853,6 +1059,7 @@ public class LoadMap : MonoBehaviour {
 		}
 	}
 
+	// Not used, creates ground plane
 	public void createGround() {
 		GameObject cube = Instantiate(Resources.Load ("Prefabs/Cube", typeof(GameObject)) as GameObject);
 		cube.transform.position = new Vector3 (width/2, -0.6f, height/2);
@@ -891,6 +1098,7 @@ public class LoadMap : MonoBehaviour {
 
 	}
  
+	// Renders a color-coded plane for each area
 	public void renderAreas() {
 
 		for (int i = 0; i < subdivisionsx; i++) {

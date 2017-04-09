@@ -4,6 +4,7 @@ using UnityEngine;
 
 public class CoastMap {
 
+	// Describes how a coast connects with surrounding land
 	public bool left, right, top, bottom;
 	public bool topleft, topright, bottomleft, bottomright;
 

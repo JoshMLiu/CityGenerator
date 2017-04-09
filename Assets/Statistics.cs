@@ -3,11 +3,13 @@ using System.Collections.Generic;
 using UnityEngine;
 using System.Xml;
 
+// Used to get random subdivisions/buildings for procedural generation. Contains dictionaries with values for the counts of types of nodes encountered.
 public class Statistics {
 
 	public int totalnodes;
 	public int landcount;
 
+	// Basic subdivision types 
 	public enum AreaType {
 		BUILDINGS,
 		NATURAL,
@@ -70,12 +72,14 @@ public class Statistics {
 	public Statistics () {
 	}
 
+	// Using nodes, calculate probabilities
 	public void compileData() {
 
 		int buildingcount = 0;
 		int naturalcount = 0;
 		int othercount = 0;
 
+		// Some nodes are disproportionately common. This alters the counts.
 		int housecount = 0;
 		buildings.TryGetValue ("house", out housecount);
 		if (housecount > 0) {
@@ -111,6 +115,7 @@ public class Statistics {
 			buildings ["shop"] = newshopcount;
 		}
 
+		// Get total node numbers of each category
 		foreach (KeyValuePair<string, int> entry in buildings) {
 			buildingcount += entry.Value;
 		}
@@ -159,6 +164,7 @@ public class Statistics {
 
 		float towersum = 0;
 		int numtowers = 0;
+		// calulate an Avg tower height
 		foreach (KeyValuePair<int, int> entry in towerheights) {
 			numtowers += entry.Value;
 			towersum += (float)entry.Key * (float)entry.Value;
@@ -215,6 +221,7 @@ public class Statistics {
 			
 	}
 
+	// add nodes from an area to the dicionaries 
 	public void addArea(Area a) {
 
 		List<XmlNode> ways = a.regionwaynodes;
@@ -427,6 +434,8 @@ public class Statistics {
 		System.Console.WriteLine ("    -> Fuel ratio = " + fuelratio);
 
 	}
+
+	// Random getter functions
 
 	public AreaType getRandomAreaType() {
 

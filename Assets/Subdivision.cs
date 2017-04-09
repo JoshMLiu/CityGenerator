@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 
+// Contained within an area, has an irregular quad shape
 public class Subdivision {
 
 	public Mesh mesh;
@@ -9,6 +10,7 @@ public class Subdivision {
 	float streetwidth;
 	public Statistics stats;
 	public Vector2 midpoint;
+	// Too small for buildings
 	public bool isempty;
 
 	public Subdivision(Vector2 topleft, Vector2 topright, Vector2 botleft, Vector2 botright, float sw) {
@@ -29,6 +31,7 @@ public class Subdivision {
 		createMesh ();
 		isempty = false;
 
+		// Check for size
 		if (topright.x - topleft.x <= 3*streetwidth) {
 			isempty = true;
 			return;
@@ -49,13 +52,16 @@ public class Subdivision {
 		stats = new Statistics ();
 	}
 
+	// creates a quad mesh plane
 	void createMesh() {
 
 		int[] indices = new int[6];
 
+		// firsttriangle
 		indices [0] = 0;
 		indices [1] = 1;
 		indices [2] = 2;
+		// secondtriangle
 		indices [3] = 2;
 		indices [4] = 1;
 		indices [5] = 3;
@@ -70,12 +76,14 @@ public class Subdivision {
 
 		List<MeshPack> meshes = new List<MeshPack> ();
 
+		// slight offset to move buildings away from road
 		Vector3[] temppoints = new Vector3[4];
 		temppoints [0] = points [0] + new Vector3 (streetwidth / 2, 0, -streetwidth / 2);
 		temppoints [1] = points [1] + new Vector3 (-streetwidth / 2, 0, -streetwidth / 2);
 		temppoints [2] = points [2] + new Vector3 (streetwidth / 2, 0, streetwidth / 2);
 		temppoints [3] = points [3] + new Vector3 (-streetwidth / 2, 0, streetwidth / 2);
 
+		// Get minimum bounding box
 		float minx = Mathf.Min (temppoints [0].x, temppoints [2].x);
 		float maxx = Mathf.Max (temppoints [1].x, temppoints [3].x);
 
@@ -85,6 +93,7 @@ public class Subdivision {
 		float currentx = minx;
 		float currenty = maxy;
 
+		// iterate in building sizes (random) over the bounding box
 		while (currenty >= miny) {
 			float randy = Random.Range (0.6f, 1f);
 			float nexty = currenty - randy;
@@ -104,6 +113,7 @@ public class Subdivision {
 				float lengthx = nextx - currentx;
 				float lengthy = currenty - nexty;
 
+				// midpoint of building is on road, don't render the building
 				if (containsPointInMesh (midpoint) && lengthx > randx / 2 && lengthy > randy / 2) {
 
 					Vector2 tl = new Vector2 (currentx, currenty);
@@ -116,8 +126,10 @@ public class Subdivision {
 					Vector2 newbl = bl;
 					Vector2 newbr = br;
 
+					// tower, food, shop etc...
 					Statistics.BuildingType btype = stats.getRandomBuilding ();
 
+					// Check if each corner sticks out from subdivision and crop appropriately
 					if (!containsPointInMesh (tl)) {
 
 						Vector3 intersectionpoint = new Vector3 ();
@@ -183,7 +195,7 @@ public class Subdivision {
 						} 
 
 					}
-
+					// Special cropping case where the corner sticks out on the x and y
 					if (pointInTriangle (new Vector2 (temppoints [0].x, temppoints [0].z), tl, tr, bl) || pointInTriangle (new Vector2 (temppoints [0].x, temppoints [0].z), bl, tr, br)) {
 						newtl = new Vector2 (temppoints [0].x, temppoints [0].z);
 					}
@@ -202,6 +214,7 @@ public class Subdivision {
 					bl = newbl;
 					br = newbr;
 
+					// Set small spaces between buildings
 					Vector2 reducedtl = tl + new Vector2 (streetwidth / 4, -streetwidth / 4);
 					Vector2 reducedtr = tr + new Vector2 (-streetwidth / 4, -streetwidth / 4);
 					Vector2 reducedbl = bl + new Vector2 (streetwidth / 4, streetwidth / 4);
@@ -210,6 +223,7 @@ public class Subdivision {
 					float maxwidth = Mathf.Max (reducedtr.x - reducedtl.x, reducedbr.x - reducedbl.x);
 					float maxheight = Mathf.Max (reducedtl.y - reducedbl.y, reducedtr.y - reducedbr.y);
 
+					// Don't render if building is too skinny
 					if (maxwidth < streetwidth || maxheight < streetwidth) {
 						currentx = nextx;
 						continue;
@@ -218,6 +232,7 @@ public class Subdivision {
 					if (btype == Statistics.BuildingType.TOWER) {
 						float rand = Random.Range (0f, 1f);
 						if (rand <= outputchance) {
+							// Get random tower height based on avg height and variance
 							float h = (float)stats.getRandomTowerHeight ();
 							MeshPack mp = new MeshPack (createBuildingMesh (reducedtl, reducedtr, reducedbl, reducedbr, h / 10 + 0.2f));
 							mp.btype = btype;
@@ -246,6 +261,7 @@ public class Subdivision {
 
 		if (otype == Statistics.OtherType.LEISURE || otype == Statistics.OtherType.ATTRACTION) {
 
+			// mesh fills whole subdivision
 			float randheight = Random.Range (0.5f, 0.8f);
 			Vector2 tl = new Vector2 (points [0].x + streetwidth/2, points [0].z - streetwidth/2);
 			Vector2 tr = new Vector2 (points [1].x - streetwidth/2, points [1].z - streetwidth/2);
@@ -254,7 +270,8 @@ public class Subdivision {
 			return createBuildingMesh (tl, tr, bl, br, randheight);
 
 		} else if (otype == Statistics.OtherType.FUEL) {
-			
+
+			// Mesh fills a portion of subdivision on random side (like a gas station)
 			int randside = Random.Range (0, 4);
 
 			if (randside == 0) {
@@ -341,6 +358,7 @@ public class Subdivision {
 
 	}
 
+	// Creates all triangles in 3d building mesh
 	public Mesh createBuildingMesh(Vector2 p1, Vector2 p2, Vector2 p3, Vector2 p4, float height) {
 
 		Vector3[] vertices = new Vector3[8];
@@ -356,6 +374,7 @@ public class Subdivision {
 
 		int[] indices = new int[36];
 
+		// bot
 		indices [0] = 0;
 		indices [1] = 1;
 		indices [2] = 2;
@@ -363,6 +382,7 @@ public class Subdivision {
 		indices [4] = 1;
 		indices [5] = 3;
 
+		//top
 		indices [6] = 4;
 		indices [7] = 5;
 		indices [8] = 6;
@@ -370,6 +390,7 @@ public class Subdivision {
 		indices [10] = 5;
 		indices [11] = 7;
 
+		//sides
 		indices [12] = 0;
 		indices [13] = 5;
 		indices [14] = 4;
@@ -408,6 +429,7 @@ public class Subdivision {
 		return m;
 	}
 
+	// checks if a point is in the subdivision
 	public bool containsPointInMesh(Vector2 point) {
 
 		Vector3[] vertices = mesh.vertices;

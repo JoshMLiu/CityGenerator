@@ -5,14 +5,23 @@ using System.Xml;
 
 public class Area {
 
+	// number of midpoint diplacement iterations to do for coasts 
 	public static int coastsubdivisions = 6;
-	int level;
+
+	// LAND, WATER, COAST
 	public Type type;
+
+	// lists of nodes in this area
 	public List<XmlNode> regionnodes;
 	public List<XmlNode> regionwaynodes;
+
+	// land connection map
 	public CoastMap coastmap;
+
 	public List<Mesh> meshes;
 	public List<Subdivision> subdivisions;
+
+	// distance to seperate subdivisions by
 	float streetwidth;
 	public Statistics statistics; 
 
@@ -22,6 +31,7 @@ public class Area {
 		COAST,
 	}
 
+	// bounds
 	float minx;
 	float miny;
 	float maxx;
@@ -32,9 +42,6 @@ public class Area {
 
 	float width;
 	float height;
-
-	int[] sides;
-	int[] corners;
 
 	public Area(float mnx, float mny, float mxx, float mxy) {
 		minx = mnx;
@@ -91,6 +98,7 @@ public class Area {
 		return halfy;
 	}
 
+	// Goes through meshes and checks if a point is in any of them
 	public bool containsPointInMesh(Vector2 point) {
 
 		foreach (Mesh m in meshes) {
@@ -117,6 +125,7 @@ public class Area {
 		return false;
 	}
 
+	// Used in other functions
 	public bool pointInTriangle(Vector2 pt, Vector2 tri1, Vector2 tri2, Vector2 tri3) {
 
 		bool b1, b2, b3;
@@ -133,6 +142,7 @@ public class Area {
 		return (p1.x - p3.x) * (p2.y - p3.y) - (p2.x - p3.x) * (p1.y - p3.y);
 	}
 
+	// Checks if the entire area contains a point
 	public bool containsPoint(Vector2 point) {
 		if (point.x >= minx && point.x <= maxx && point.y >= miny && point.y <= maxy) {
 			return true;
@@ -149,6 +159,7 @@ public class Area {
 			return 'W';
 	}
 
+	// Midpoint displacement algorithm for setting random coast shape, calculates the random line between two points and returns a list of line points
 	public Vector2[] randomCoast(Vector2 start, Vector2 end, bool corner) {
 
 		List<Vector2> vertices = new List<Vector2>();
@@ -189,6 +200,7 @@ public class Area {
 		return vertices.ToArray();
 	}
 
+	// Create meshes that make up the coast. 
 	public void createMeshes() {
 
 		Vector2 lefthalf = new Vector2 (minx, halfy);
@@ -196,6 +208,8 @@ public class Area {
 		Vector2 tophalf = new Vector2 (halfx, maxy);
 		Vector2 bottomhalf = new Vector2 (halfx, miny);
 
+		// There are alot of cases for where the coasts connect. This calculates the two connection points, and gets the random midpoint diplacement line.
+		// Then it creates all the necessary meshes.
 		if (coastmap.left) {
 
 			bool skip = false;
@@ -393,6 +407,7 @@ public class Area {
 
 	}
 
+	// Create a mesh given point arrays
 	public Mesh createMesh(Vector2[] meshpoints) {
 		Triangulator tr = new Triangulator (meshpoints);
 		int[] indices = tr.Triangulate ();
@@ -409,6 +424,7 @@ public class Area {
 		return mesh;
 	}
 		
+	// Create random lines through area and subdivide based on these lines
 	public void setRandomSubdivisions() {
 
 		Vector2 topleft = new Vector2 (minx, maxy);
@@ -416,6 +432,7 @@ public class Area {
 		Vector2 bottomleft = new Vector2 (minx, miny);
 		Vector2 bottomright = new Vector2 (maxx, miny);
 
+		// Area is divide by 2 to 3 on each side
 		int xdivisions = Random.Range (2, 4);
 		int ydivisions = Random.Range (2, 4);
 
@@ -455,8 +472,7 @@ public class Area {
 
 		}
 
-		// get intersections between lines
-
+		// get intersection points between lines
 		for (int i = 1; i <= xdivisions; i++) {
 			for (int j = 1; j <= ydivisions; j++) {
 
@@ -484,7 +500,7 @@ public class Area {
 			}
 		}
 
-
+		// Create subdivisions from each of the subareas formed
 		for (int j = 0; j <= ydivisions; j++) {
 			for (int i = 0; i <= xdivisions; i++) {
 
